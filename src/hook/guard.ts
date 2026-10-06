@@ -314,6 +314,16 @@ export function guardDecision(g: GuardInput): GuardDecision {
 
   const cmd = String(g.toolInput.command ?? '');
   const cwdOutside = !own || !isInside(realResolve(g.cwd), realResolve(own));
+  // git can write files with --output/-o. Forks may only write inside their own worktree.
+  for (const target of gitOutputTargets(cmd)) {
+    const file = realResolve(path.resolve(g.cwd, target));
+    if (!own || !isInside(file, realResolve(own))) {
+      return {
+        deny: true,
+        reason: `pitstop: git would write ${target}, which is outside this fork's worktree${own ? ` (${own})` : ''}. Write output files inside your worktree.`,
+      };
+    }
+  }
   if (cwdOutside && forbidden(g.cwd, g, own) && gitMutates(cmd)) {
     return {
       deny: true,
@@ -335,6 +345,30 @@ export function guardDecision(g: GuardInput): GuardDecision {
     }
   }
   return ALLOW;
+}
+
+/** Files git is asked to write with -o/--output (diff, log, show, format-patch, …), including in nested shells. */
+export function gitOutputTargets(cmd: string, depth = 0): string[] {
+  const out: string[] = [];
+  if (depth > 3) return out;
+  for (const words of shellWords(cmd)) {
+    for (const w of words)
+      if (/\s/.test(w) && /\bgit\b/.test(w)) out.push(...gitOutputTargets(w, depth + 1));
+    const g = words.findIndex(isGitWord);
+    if (g === -1) continue;
+    for (let i = g + 1; i < words.length; i++) {
+      const a = words[i]!;
+      if (a === '-o' || a === '--output' || a === '--output-directory') {
+        if (words[i + 1]) out.push(words[i + 1]!);
+        i++;
+      } else if (a.startsWith('--output=') || a.startsWith('--output-directory=')) {
+        out.push(a.slice(a.indexOf('=') + 1));
+      } else if (/^-o\S+/.test(a)) {
+        out.push(a.slice(2));
+      }
+    }
+  }
+  return out;
 }
 
 /** Absolute paths mentioned in a shell command (good enough for a guard, not a parser). */

@@ -11,6 +11,7 @@ import {
   absolutePaths,
   dirArguments,
   gitMutates,
+  gitOutputTargets,
   guardDecision,
   shellWords,
 } from '../../src/hook/guard.js';
@@ -432,5 +433,37 @@ describe('git command classification', () => {
     'npm test',
   ])('treats `%s` as read-only', (cmd) => {
     expect(gitMutates(cmd)).toBe(false);
+  });
+});
+
+describe('git output files', () => {
+  const g = {
+    repoTop: '/repo',
+    worktree: '/repo/.claude/worktrees/pit-x',
+    cwd: '/repo/.claude/worktrees/pit-x',
+  };
+  it('finds every form of output target', () => {
+    expect(
+      gitOutputTargets(
+        'git diff --output=/a; git log -o b; git format-patch -o out; git show -oc; sh -c "git diff --output ../z"',
+      ),
+    ).toEqual(['/a', 'b', 'out', 'c', '../z']);
+    expect(gitOutputTargets('git diff HEAD; echo -o x')).toEqual([]);
+  });
+  it('denies git output outside the fork worktree, even outside the repo', () => {
+    for (const command of [
+      'git diff --output=/home/u/.bashrc',
+      'git log -o ../../../x.txt',
+      'git format-patch -o /tmp/p',
+    ]) {
+      expect(guardDecision({ ...g, toolName: 'Bash', toolInput: { command } }).deny).toBe(true);
+    }
+    expect(
+      guardDecision({
+        ...g,
+        toolName: 'Bash',
+        toolInput: { command: 'git diff --output=changes.patch' },
+      }).deny,
+    ).toBe(false);
   });
 });
