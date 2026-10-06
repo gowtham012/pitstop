@@ -126,3 +126,34 @@ Claude Code doesn't bind `ctrl+\` in any context ([keybindings docs](https://cod
 The first run found one gap: the fork stopped on a permission prompt for `git add`/`git commit`. Fork sessions now pre-allow `git add/commit/status/diff/log/show` (`FORK_ALLOW` in `src/claude/settings.ts`). The PreToolUse guard still keeps those commands inside the fork's worktree.
 
 The same run also confirmed that merging a fork that is waiting for input is refused ("still working").
+
+## Phase 2: cloud and agent forks
+
+Checked against the Claude Code docs on 2026-10-06 ([cloud sessions](https://code.claude.com/docs/en/claude-code-on-the-web)):
+
+- `claude --cloud "<task>"` starts a cloud session that clones the GitHub remote **at the current branch**, not your local checkout. pitstop therefore pushes the fork's starting point (snapshot S, uncommitted work included) to `pit/<name>`, and runs `claude --cloud` from a worktree on that branch.
+- From the CLI, handoff is **one-way**: a local conversation can't be pushed into a cloud session. Cloud forks start from a conversation summary (`src/claude/digest.ts`).
+- `claude -p "<msg>" --cloud <session-id>` queues a message into an existing session and prints `Session ID:`. pitstop uses it for `ctrl+\` `s`.
+- A cloud session can push only where the user's GitHub connection has push access. Without a GitHub remote it uploads a bundle and can't push back, so cloud forks require `origin`.
+- Codex (`codex resume`, `codex fork`) and Gemini CLI (`gemini --resume`) resume only their own sessions. Agent forks also start from the summary.
+
+**Covered by tests:** cloud forks run against a local bare `origin` and a fake `claude --cloud` that prints a session URL. Tested:
+
+- the push of the starting point, including uncommitted work;
+- capturing the session id from the pane;
+- readiness detection with `ls-remote`;
+- merging what the "cloud" pushed back (also `--from` another branch);
+- deleting the remote branch afterwards.
+
+Agent forks run against a fake agent binary. Tested:
+
+- the worktree is built from the snapshot;
+- the summary is the last argument;
+- the one-time privacy confirmation;
+- merging uncommitted agent work;
+- refusing to fork from an agent pane.
+
+**Still to do against real services:**
+
+- One cloud fork against `gowtham012/pitstop` once that repo exists: confirm the session URL is captured, the cloud pushes `pit/<name>`, `pit merge` brings it home, and the branch is deleted. Then archive the session.
+- Codex and Gemini CLI aren't installed or signed in here. The README gives the steps to try them.

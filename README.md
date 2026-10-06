@@ -26,7 +26,8 @@ Claude Code already has the pieces: `/fork`, background sessions, `claude attach
 - **Forking a busy session safely.** A native fork of a session that's mid-tool-call re-runs that call (see [docs/spike.md](docs/spike.md)). pitstop forks it as a _sealed copy_: the pending call is marked as the parent's job, so the fork goes straight to your task.
 - **Your uncommitted work comes along.** Each fork's worktree starts from a snapshot of the parent's working tree, untracked files included. The snapshot uses a throwaway git index, so the parent's files and staging are never touched.
 - **Merging into a branch that's still being worked on.** pitstop picks the safe option, and the main session is told what happened either way.
-- **A branch tree, a conflict radar, a test gate, budgets and presets.**
+- **Fork to the cloud or to another agent.** Send a heavy task to a Claude cloud session, or hand one to Codex or Gemini CLI, and merge it back the same way.
+- **A branch tree, a conflict radar, a test gate, budgets, presets and a shareable report.**
 
 ## Install
 
@@ -49,19 +50,21 @@ pit                      # starts (or reopens) the main session; extra flags go 
 
 Inside `pit`, press `ctrl+\`, then one key:
 
-| Key               | What it does                                                                                  |
-| ----------------- | --------------------------------------------------------------------------------------------- |
-| `f`               | Fork the focused session into a new pane. Type the task, or `hotfix: <task>` to use a preset. |
-| `b`               | Fork into the background (no pane). The status bar shows when it's done.                      |
-| `←` `→` / `1`–`9` | Move focus, or jump to a session. Clicking a pane focuses it too.                             |
-| `z`               | Zoom the focused pane to full screen and back.                                                |
-| `m`               | Merge a fork back (see below).                                                                |
-| `d`               | Open the fork's diff in a pane (`delta` if installed, otherwise `less`).                      |
-| `p`               | Pull the main session's latest commits into the fork.                                         |
-| `t`               | Branch tree with state, files touched, cost and overlaps.                                     |
-| `x`               | Discard a fork (stops it, removes its worktree and branch, keeps the conversation).           |
-| `r`               | Re-attach a pane, e.g. after pressing `←` inside it opened Claude's agent view.               |
-| `q`               | Quit pit. **Every session keeps running.** Run `pit` again to get the same panes back.        |
+| Key               | What it does                                                                                           |
+| ----------------- | ------------------------------------------------------------------------------------------------------ |
+| `f`               | Fork the focused session into a new pane. Type the task. Tab cycles presets, or type `hotfix: <task>`. |
+| `b`               | Fork into the background (no pane). The status bar shows when it's done.                               |
+| `←` `→` / `1`–`9` | Move focus, or jump to a session. Clicking a pane focuses it too.                                      |
+| `z`               | Zoom the focused pane to full screen and back.                                                         |
+| `m`               | Merge a fork back (see below).                                                                         |
+| `d`               | Open the fork's diff in a pane (`delta` if installed, otherwise `less`).                               |
+| `p`               | Pull the main session's latest commits into the fork.                                                  |
+| `t`               | Branch tree with state, files touched, cost and overlaps.                                              |
+| `x`               | Discard a fork (stops it, removes its worktree and branch, keeps the conversation).                    |
+| `e`               | Write a shareable report of every fork (see [Report](#report)).                                        |
+| `s`               | Send a message to a cloud fork.                                                                        |
+| `r`               | Re-attach a pane, e.g. after pressing `←` inside it opened Claude's agent view.                        |
+| `q`               | Quit pit. **Every session keeps running.** Run `pit` again to get the same panes back.                 |
 
 Pressing `ctrl+\` twice sends `ctrl+\` itself to the pane. Claude Code doesn't bind `ctrl+\`, so nothing is lost. You can change the prefix with `prefixKey`.
 
@@ -76,7 +79,72 @@ pit diff fix-the-login-500
 pit merge fix-the-login-500           # --strategy commit|apply|defer|pr, --keep, --skip-tests
 pit pull fix-the-login-500
 pit discard fix-the-login-500
+pit fork --cloud "run the slow migration"      # a Claude cloud session (asks before pushing)
+pit fork --agent codex "add a health check"     # Codex, Gemini CLI or any agent in config
+pit report --out - | gh pr create --body-file - # everything the forks did, as a PR description
 ```
+
+## Cloud forks and other agents
+
+Presets `cloud`, `codex` and `gemini` are built in. Pick one with Tab in the fork prompt, or type `cloud: <task>`.
+
+**What these forks know.** Claude Code can't send a local conversation into a cloud session, and Codex or Gemini CLI can't load a Claude transcript. So these forks start from a **summary of the conversation**: what you asked, what Claude said, and one line per command it ran. Tool output is left out, and the oldest turns are trimmed first. Only Claude forks on your machine get the full conversation.
+
+**Cloud forks** (`claude --cloud`):
+
+- Need an `origin` remote on GitHub that your Claude GitHub connection can push to.
+- pitstop asks first, then pushes the fork's starting point, **including your uncommitted changes**, to `pit/<name>` on origin, and starts a cloud session on that branch.
+- The cloud session is told to push its work back to `pit/<name>`. pitstop checks origin every 30 seconds and shows the fork as ready when it does.
+- `ctrl+\` `s` sends the cloud session a follow-up message. The session link is shown in the pane and in `pit log`.
+- Merging fetches the branch and then works like any other merge. If the session had to push somewhere else, use `pit merge <name> --from <branch>`. Afterwards the remote branch is deleted. The cloud session itself is left for you to archive.
+
+**Agent forks** (Codex, Gemini CLI, or anything you configure):
+
+- The first time a repo sends a summary to an agent, pitstop asks, because the summary goes to that provider (OpenAI, Google). It remembers your answer per repo and agent.
+- The agent runs in a pane inside the fork's own worktree, with `PITSTOP_BRANCH` and `PITSTOP_PORT_OFFSET` set, and is told to commit there.
+- Merge, test gate, radar and the report work the same. **There's no write guard**, because other agents don't run pitstop's hooks.
+- Agent panes are child processes of `pit`, so quitting `pit` stops them. Their worktree and branch are kept, and next time `pit` reopens them with the agent's resume command.
+- Configure agents in `~/.pitstop/config.json`. The prompt is passed as the last argument:
+
+```json
+{
+  "agents": {
+    "codex": {
+      "cmd": "codex",
+      "args": [],
+      "resumeArgs": ["resume", "--last"],
+      "provider": "OpenAI"
+    },
+    "gemini": {
+      "cmd": "gemini",
+      "args": ["-i"],
+      "resumeArgs": ["--resume", "latest"],
+      "provider": "Google"
+    }
+  }
+}
+```
+
+To try it with the real CLIs: install and sign in to `codex` or `gemini`, run `pit doctor` to check they're on your PATH, then in `pit` press `ctrl+\` `f` and type `codex: <task>`.
+
+## Report
+
+`pit report` (or `ctrl+\` `e`) writes a summary of every fork in the repo. For each one it shows:
+
+- the task and where it ran;
+- the result and why (for example, "merged: commit, the parent's working tree is clean");
+- the test gate result;
+- commits, changes and estimated cost;
+- the fork's last message.
+
+It also includes the branch tree and any files two sessions are both changing.
+
+- By default it's Markdown in `~/.pitstop/reports/`.
+- `--out -` prints it, for example into `gh pr create --body-file -`.
+- `--html` writes a self-contained page.
+- `--live` only includes forks that are still running.
+
+Merged and discarded forks are included too. pitstop saves their commits and changes before deleting their branches.
 
 ## How it works
 
@@ -145,7 +213,7 @@ pit discard fix-the-login-500
 
 A `.pitstop.json` comes with whatever repo you cloned, so pitstop limits what it can do on its own:
 
-- `test` and `setup.run` are **ignored until you approve them** with `pit trust`. If they change later, pitstop asks again.
+- `test`, `setup.run` and `agents` commands are **ignored until you approve them** with `pit trust`. If they change later, pitstop asks again.
 - Presets in a repo's config may only use the `plan`, `manual` or `acceptEdits` permission modes. Anything stronger must come from your own config.
 - `setup.copy` and `setup.symlink` entries must stay inside the repo. Absolute paths, `..`, and symlinks that lead outside are skipped.
 
@@ -154,7 +222,10 @@ A `.pitstop.json` comes with whatever repo you cloned, so pitstop limits what it
 - The write guard is a guardrail against mistakes, not a sandbox. It covers file tools and the usual shell and git escapes, but a determined command can get around pattern checks. Use Claude Code's sandbox if you need hard isolation.
 - `apply` leaves the fork's changes unstaged in a working tree that the parent agent is still editing. The parent is told, but its next edit to an unrelated part of the same file can still conflict. When in doubt, pitstop defers.
 - Sealed forks depend on Claude Code's transcript format. pitstop reads it loosely and falls back to native forking when it can't find a transcript.
-- Cost figures are estimates.
+- Cost figures are estimates, and aren't tracked for cloud and agent forks.
+- Cloud and agent forks start from a summary, not the full conversation.
+- Agent forks aren't covered by the write guard, and stop when `pit` quits.
+- Cloud forks are tested here against a stand-in (a local bare remote and a fake `claude --cloud`). The real check against a GitHub repo is recorded in docs/spike.md once it has run.
 
 ## Development
 
