@@ -22,6 +22,7 @@ npm install
 python3 scripts/soundtrack.py          # writes public/soundtrack.wav (needs numpy)
 npm run render                         # out/pitstop.mp4
 npm run studio                         # preview and scrub in the browser
+npm run readme-assets                  # refresh the README's 720p copy and GIF preview (needs ffmpeg)
 ```
 
 On a machine where Remotion can't download its own Chrome, point it at one: `REMOTION_BROWSER=/path/to/chrome npm run render`.

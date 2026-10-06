@@ -9,7 +9,9 @@
 ![Node 20+](https://img.shields.io/badge/node-%E2%89%A520-brightgreen.svg)
 ![Status: early](https://img.shields.io/badge/status-early-orange.svg)
 
-<img src="docs/assets/screenshot-forks.png" alt="pit in one terminal: the main Claude session running a long test suite on the left, two forks on the right (a hotfix and a changelog draft), each in a rounded frame with its state, and a bottom bar with session tabs and buttons" width="100%">
+<a href="docs/assets/pitstop-launch.mp4"><img src="docs/assets/pitstop-launch-preview.gif" alt="Launch video preview: a pile of terminals collapses into one, the pitstop logo bursts out, F2 forks the running session into a split pane with its full context, and F3 merges the fix back while main keeps running" width="100%"></a>
+
+**[▶ Watch the 50-second launch video (with sound)](docs/assets/pitstop-launch.mp4)**
 
 </div>
 
@@ -17,6 +19,8 @@ Your main Claude session is twenty minutes into a long task when something urgen
 
 - A fork with the **full conversation** opens next to the main session, in **its own git worktree**, and both keep running.
 - When it's done, **F3** (or **Merge**) brings the code back safely and **tells the main session what changed**.
+
+<img src="docs/assets/screenshot-forks.png" alt="pit in one terminal: the main Claude session running a long test suite on the left, two forks on the right (a hotfix and a changelog draft), each in a rounded frame with its state, and a bottom bar with session tabs and buttons" width="100%">
 
 ## Contents
 

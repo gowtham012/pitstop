@@ -6,6 +6,7 @@ All notable changes to this project are listed here. The format follows [Keep a 
 
 ### Added
 
+- **Launch video:** a 50-second video at the top of the README (autoplaying preview, full video with sound), built with Remotion in `marketing/video`.
 - **Resume:** after a reboot or a crash, `pit` continues main's last conversation and every fork that had a pane (same hooks, preset and worktree) instead of starting over. Click a stopped pane's bottom border or press `ctrl+\` `r` to resume it, `pit resume [name]` works from the command line, and `pit --new` starts a fresh main.
 - **Easy exit:** F10 twice, or the **Quit** button then Enter.
 - **Short keys and buttons:** every action takes at most two keys: F1-F9 (F2 fork, F3 merge, F4 diff, F5 tree, F8 delete, F1 help) or, on a Mac, Option+letter (⌥F fork, ⌥M merge, …). The bottom bar has clickable buttons labelled with their keys. `ctrl+\` still works, and `"shortKeys": false` turns the new keys off.
