@@ -120,6 +120,35 @@ describe('input router', () => {
   });
 });
 
+describe('short keys', () => {
+  it('runs commands from F-keys and macOS Option symbols, with no prefix', () => {
+    const r = new InputRouter(0x1c);
+    expect(r.feed('\x1bOQ')).toEqual([{ type: 'command', command: 'fork' }]);
+    expect(r.feed('\x1b[12~')).toEqual([{ type: 'command', command: 'fork' }]);
+    expect(r.feed('\x1b[19~')).toEqual([{ type: 'command', command: 'delete' }]);
+    expect(r.feed('abƒ')).toEqual([
+      { type: 'forward', data: 'ab' },
+      { type: 'command', command: 'fork' },
+    ]);
+    expect(r.feed('µ∂†≈').map((a) => (a.type === 'command' ? a.command : a.type))).toEqual([
+      'merge',
+      'diff',
+      'tree',
+      'delete',
+    ]);
+  });
+
+  it('leaves real letters, pastes and turned-off short keys alone', () => {
+    const r = new InputRouter(0x1c);
+    expect(r.feed('straße œuvre £5')).toEqual([{ type: 'forward', data: 'straße œuvre £5' }]);
+    expect(r.feed('\x1b[200~ƒ(x)\x1b[201~')).toEqual([
+      { type: 'forward', data: '\x1b[200~ƒ(x)\x1b[201~' },
+    ]);
+    const off = new InputRouter(0x1c, false);
+    expect(off.feed('ƒ\x1bOQ')).toEqual([{ type: 'forward', data: 'ƒ\x1bOQ' }]);
+  });
+});
+
 describe('firstKeyLength', () => {
   it('splits one keypress off a chunk', () => {
     expect(firstKeyLength('x\x1cq')).toBe(1);

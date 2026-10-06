@@ -6,6 +6,7 @@ All notable changes to this project are listed here. The format follows [Keep a 
 
 ### Added
 
+- **Short keys and buttons:** every action takes at most two keys: F1-F9 (F2 fork, F3 merge, F4 diff, F5 tree, F8 delete, F1 help) or, on a Mac, Option+letter (⌥F fork, ⌥M merge, …). The bottom bar has clickable buttons labelled with their keys. `ctrl+\` still works, and `"shortKeys": false` turns the new keys off.
 - **Automatic updates:** once a day pitstop installs the newest version in the background (a source install fast-forwards its clone and builds beside `dist/`, then swaps it in; an npm install runs `npm install -g`). It never touches a clone with local changes or commits. `pit upgrade` updates now, `pit upgrade --check` only checks, and `"autoUpgrade": false` turns it off.
 - **Framed panes:** each pane has a rounded frame with its name and state on top and its cost at the bottom; the focused pane is highlighted, and the bottom bar shows sessions as tabs.
 - **Delete:** `pit delete <name>` (also `pit rm`; `pit discard` still works) and `ctrl+\` `x`. `--conversation`, or `c` in the popup, also deletes the fork's Claude conversation. `pit delete --finished`, or `c` in the branch tree, clears merged and deleted forks from the history. Forks that were discarded are now shown as "deleted".

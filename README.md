@@ -9,14 +9,14 @@
 ![Node 20+](https://img.shields.io/badge/node-%E2%89%A520-brightgreen.svg)
 ![Status: early](https://img.shields.io/badge/status-early-orange.svg)
 
-<img src="docs/assets/split-many.svg" alt="One terminal split into live panes: the main Claude session on the left, three forks stacked on the right, a status bar listing every session" width="100%">
+<img src="docs/assets/screenshot-forks.png" alt="pit in one terminal: the main Claude session running a long test suite on the left, two forks on the right (a hotfix and a changelog draft), each in a rounded frame with its state, and a bottom bar with session tabs and buttons" width="100%">
 
 </div>
 
-Your main Claude session is twenty minutes into a long task when something urgent comes up. Press `ctrl+\` `f` and type the task:
+Your main Claude session is twenty minutes into a long task when something urgent comes up. Press **F2** (or click **+ Fork**) and type the task:
 
 - A fork with the **full conversation** opens next to the main session, in **its own git worktree**, and both keep running.
-- When it's done, `ctrl+\` `m` merges the code back safely and **tells the main session what changed**.
+- When it's done, **F3** (or **Merge**) brings the code back safely and **tells the main session what changed**.
 
 ## Contents
 
@@ -36,7 +36,7 @@ Your main Claude session is twenty minutes into a long task when something urgen
 
 Start `pit` instead of `claude`. The terminal splits only when you fork. Every session keeps running, and focus only decides which pane gets your keystrokes.
 
-<img src="docs/assets/split-two-panes.svg" alt="Two live panes: the main session running its test suite on the left, the fork fixing a bug on the right" width="100%">
+<img src="docs/assets/screenshot-fork.png" alt="Two live panes: the main session running its test suite on the left, the fork that fixed a login bug on the right, highlighted because it has focus" width="100%">
 
 Over time, it looks like this:
 
@@ -128,25 +128,31 @@ Requirements:
 
 ## Keys and commands
 
-Inside `pit`, press `ctrl+\`, then one key:
+Click a button in the bottom bar, or press one key. Every action needs at most two keys:
 
-| Key               | What it does                                                                                |
-| ----------------- | ------------------------------------------------------------------------------------------- |
-| `f`               | Fork the focused session into a new pane. Tab cycles presets, or type `hotfix: <task>`.     |
-| `b`               | Fork into the background (no pane). The status bar shows when it's done.                    |
-| `←` `→` / `1`–`9` | Move focus or jump to a session. Clicking a pane focuses it too.                            |
-| `z`               | Zoom the focused pane to full screen and back.                                              |
-| `m`               | Merge a fork back.                                                                          |
-| `d`               | Open the fork's diff in a pane.                                                             |
-| `p`               | Pull main's latest commits into the fork.                                                   |
-| `t`               | Branch tree with state, files touched, cost and overlaps. `c` clears finished forks.        |
-| `x`               | Delete a fork: stops it, removes its worktree and branch. `c` deletes its conversation too. |
-| `e`               | Write a shareable report.                                                                   |
-| `s`               | Send a message to a cloud fork.                                                             |
-| `r`               | Re-attach a pane, or resume an agent.                                                       |
-| `q`               | Quit. **Claude sessions keep running.** Run `pit` again to get the same panes back.         |
+| Action                                                                           | One key | Mac | or `ctrl+\` then |
+| -------------------------------------------------------------------------------- | ------- | --- | ---------------- |
+| **Fork** the focused session into a new pane (Tab in the prompt cycles presets)  | F2      | ⌥F  | `f`              |
+| Fork into the **background** (no pane)                                           |         | ⌥B  | `b`              |
+| **Merge** a fork back                                                            | F3      | ⌥M  | `m`              |
+| Open the fork's **diff** in a pane                                               | F4      | ⌥D  | `d`              |
+| Branch **tree** with state, files, cost and overlaps (`c` clears finished forks) | F5      | ⌥T  | `t`              |
+| **Pull** main's latest commits into the fork                                     | F6      | ⌥P  | `p`              |
+| Write a shareable **report**                                                     | F7      | ⌥R  | `e`              |
+| **Delete** a fork (`c` deletes its conversation too)                             | F8      | ⌥X  | `x`              |
+| **Zoom** the focused pane and back                                               | F9      | ⌥Z  | `z`              |
+| **Help**                                                                         | F1      | ⌥/  | `?`              |
+| **Quit**. Claude sessions keep running; `pit` brings the same panes back         |         |     | `q`              |
 
-Pressing `ctrl+\` twice sends it to the pane. Claude Code doesn't bind it, and you can change it with `prefixKey`.
+- **Switch panes:** click a pane or a tab in the bottom bar, or `ctrl+\` `←` `→` / `1`–`9`.
+- **MacBook:** hold `fn` with the F key, unless your keyboard is set to use F1, F2… as standard keys. The ⌥ keys work in Terminal and iTerm2 with their default settings.
+- Turn off the one-step keys with `"shortKeys": false`. `ctrl+\` is never bound by Claude Code; pressing it twice sends it to the pane, and `prefixKey` changes it.
+
+<img src="docs/assets/screenshot-keys.png" alt="The help popup (F1) listing every action with its function key, Mac Option key and ctrl+\ key, above the bottom bar's buttons" width="100%">
+
+Deleting asks first, and only deletes the conversation if you press `c`:
+
+<img src="docs/assets/screenshot-delete.png" alt="The delete popup: y deletes the fork's worktree and branch, c also deletes its conversation, n cancels" width="100%">
 
 Everything also works from scripts or a second terminal:
 
@@ -208,7 +214,7 @@ The presets `cloud`, `codex` and `gemini` are built in. Pick one with Tab in the
 
 ## Report
 
-`pit report`, or `ctrl+\` `e`, writes a summary of every fork, including merged and deleted ones. For each fork it shows:
+`pit report`, or F7 in the split screen, writes a summary of every fork, including merged and deleted ones. For each fork it shows:
 
 - the task and where it ran;
 - the result and why;

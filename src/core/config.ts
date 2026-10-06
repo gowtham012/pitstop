@@ -61,6 +61,8 @@ export interface PitConfig {
   radarIntervalMs: number;
   /** Port offset step per fork slot, exported as PITSTOP_PORT_OFFSET. */
   portStep: number;
+  /** One-step shortcuts: F1-F9 and macOS Option+letter (⌥F fork, ⌥M merge, …). */
+  shortKeys: boolean;
   /** Install new pitstop versions automatically in the background (user config only). */
   autoUpgrade: boolean;
 }
@@ -86,6 +88,7 @@ export const DEFAULT_CONFIG: PitConfig = {
   },
   radarIntervalMs: 5000,
   portStep: 100,
+  shortKeys: true,
   autoUpgrade: true,
 };
 

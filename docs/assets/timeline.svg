@@ -50,7 +50,7 @@ text{font-family:var(--body);fill:var(--fg);font-size:13px}
 
           <!-- pit fork -->
           <rect class="box-cli" x="185" y="135" width="205" height="30" rx="4"/>
-          <text class="mono" x="197" y="155">ctrl+\ f "fix login 500"</text>
+          <text class="mono" x="197" y="155">F2 "fix login 500"</text>
           <text class="sm" x="187" y="182">snapshot · worktree · trim · split</text>
           <line class="stroke dash" x1="230" y1="135" x2="230" y2="79" marker-end="url(#ah)"/>
           <text class="sm" x="238" y="106">copies context (read only)</text>
@@ -65,7 +65,7 @@ text{font-family:var(--body);fill:var(--fg);font-size:13px}
           <path class="stroke-f" d="M640 240 C 655 240, 650 150, 661 150" marker-end="url(#ahf)"/>
           <text class="sm" x="653" y="205">done</text>
           <rect class="box-cli" x="665" y="135" width="165" height="30" rx="4"/>
-          <text class="mono" x="677" y="155">ctrl+\ m  (merge)</text>
+          <text class="mono" x="677" y="155">F3  (merge)</text>
 
           <!-- inbox -->
           <line class="stroke" x1="735" y1="165" x2="735" y2="311" marker-end="url(#ah)"/>

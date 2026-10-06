@@ -43,6 +43,13 @@ export interface UpgradeDeps {
 }
 
 const npmBin = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+/** Published installs always come from the public registry, never one a repo's .npmrc names. */
+const NPM_REGISTRY = 'https://registry.npmjs.org/';
+/** A folder no repository controls, so no project .npmrc is read. */
+const neutralDir = (): string => {
+  fs.mkdirSync(pitstopHome(), { recursive: true });
+  return pitstopHome();
+};
 
 export const defaultDeps: UpgradeDeps = {
   install: (root) =>
@@ -57,13 +64,26 @@ export const defaultDeps: UpgradeDeps = {
       },
     ),
   npmLatest: () => {
-    const r = runSync(npmBin, ['view', NPM_PACKAGE, 'version'], { timeoutMs: 30_000 });
+    const r = runSync(npmBin, ['view', NPM_PACKAGE, 'version', '--registry', NPM_REGISTRY], {
+      cwd: neutralDir(),
+      timeoutMs: 30_000,
+    });
     return r.code === 0 ? r.stdout.trim() || undefined : undefined;
   },
   npmInstall: (version) =>
-    runSync(npmBin, ['install', '-g', `${NPM_PACKAGE}@${version}`, '--no-audit', '--no-fund'], {
-      timeoutMs: 600_000,
-    }),
+    runSync(
+      npmBin,
+      [
+        'install',
+        '-g',
+        `${NPM_PACKAGE}@${version}`,
+        '--registry',
+        NPM_REGISTRY,
+        '--no-audit',
+        '--no-fund',
+      ],
+      { cwd: neutralDir(), timeoutMs: 600_000 },
+    ),
 };
 
 /** pitstop's own install folder (the npm global link is followed to the real folder). */
@@ -242,7 +262,9 @@ export function startBackgroundUpgrade(enabled: boolean, cliPath = process.argv[
     saveState({ checkedAt: new Date().toISOString() }); // one attempt per interval, even if it dies
     fs.mkdirSync(logsDir(), { recursive: true });
     const log = fs.openSync(path.join(logsDir(), 'upgrade.log'), 'a');
+    // Run from pitstop's own folder, not the user's repo, so nothing in the repo can steer it.
     const child = spawn(process.execPath, [cliPath, 'upgrade', '--auto'], {
+      cwd: packageRoot(),
       detached: true,
       stdio: ['ignore', log, log],
       env: process.env,

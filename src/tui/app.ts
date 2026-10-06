@@ -77,22 +77,34 @@ interface SavedLayout {
 }
 
 const HELP = [
-  'Press ctrl+\\ (the prefix), then one key:',
+  'Click a button in the bottom bar, or press a key:',
   '',
-  '  f   fork the focused session into a new pane',
-  '  b   fork into the background (no pane)',
-  '  ← → move focus     1-9 jump to a session',
-  '  z   zoom the focused pane / back to split',
-  '  m   merge a fork back (safe: commit, apply or defer)',
-  "  d   show a fork's diff in a pane",
-  "  p   pull main's latest commits into a fork",
-  '  t   branch tree        x   delete a fork',
-  '  e   write a shareable report of every fork',
-  '  s   send a message to a cloud fork',
-  '  r   re-attach a pane   q   quit (sessions keep running)',
+  '            one key   Mac      or ctrl+\\ then',
+  '  fork         F2      ⌥F         f',
+  '  bg fork              ⌥B         b',
+  '  merge        F3      ⌥M         m',
+  '  diff         F4      ⌥D         d',
+  '  tree         F5      ⌥T         t',
+  '  pull main    F6      ⌥P         p',
+  '  report       F7      ⌥R         e',
+  '  delete       F8      ⌥X         x',
+  '  zoom         F9      ⌥Z         z',
+  '  help         F1      ⌥/         ?',
+  '  quit                            q   (sessions keep running)',
   '',
+  'Switch panes: click a pane or a tab, or ctrl+\\ ← → / 1-9.',
   'In the fork prompt, Tab cycles presets: hotfix, explore, cloud, codex, gemini, …',
-  'ctrl+\\ twice sends ctrl+\\ to the pane. Click a pane to focus it.',
+  'On a MacBook, press fn with the F key unless F-keys are standard keys.',
+];
+
+/** Bottom-bar buttons. */
+const BUTTONS: { label: string; key: string; command: Command }[] = [
+  { label: '+ Fork', key: 'F2', command: 'fork' },
+  { label: 'Merge', key: 'F3', command: 'merge' },
+  { label: 'Diff', key: 'F4', command: 'diff' },
+  { label: 'Tree', key: 'F5', command: 'tree' },
+  { label: 'Delete', key: 'F8', command: 'delete' },
+  { label: '?', key: 'F1', command: 'help' },
 ];
 
 function stateStyle(state: string): string {
@@ -163,7 +175,7 @@ export class App {
   async run(): Promise<void> {
     this.ctx = repoContext(this.opts.cwd);
     this.cfg = loadConfig(this.ctx.top);
-    this.router = new InputRouter(prefixByte(this.cfg.prefixKey));
+    this.router = new InputRouter(prefixByte(this.cfg.prefixKey), this.cfg.shortKeys);
     this.stdout.write('pitstop: starting the main session…\n');
     if (this.opts.mainSessionId) {
       const agent = (await listAgentsAsync()).find(
@@ -529,7 +541,7 @@ export class App {
           break;
         case 'prefix':
           this.flash(
-            'ctrl+\\ … f fork · b bg fork · m merge · d diff · t tree · z zoom · ? help',
+            'ctrl+\\ … f fork · b bg fork · m merge · d diff · t tree · x delete · z zoom · ? help',
             STYLE.prompt,
             3000,
           );
@@ -571,11 +583,16 @@ export class App {
     }
   }
 
-  private statusHits: { x0: number; x1: number; id: string }[] = [];
+  /** Clickable spots in the bottom bar: session tabs (focus) and buttons (run a command). */
+  private statusHits: { x0: number; x1: number; id?: string; command?: Command }[] = [];
 
   private clickStatus(x: number): void {
     const hit = this.statusHits.find((h) => x >= h.x0 && x < h.x1);
-    if (hit) {
+    if (hit?.command) {
+      this.message = undefined;
+      this.command(hit.command);
+      this.scheduleRender();
+    } else if (hit?.id) {
       this.focus = hit.id;
       this.layoutAndRender();
     }
@@ -1180,29 +1197,55 @@ export class App {
         STYLE.statusFork,
       );
     }
-    let right: { text: string; style: string };
-    if (this.busyLabel) right = { text: `⋯ ${this.busyLabel}`, style: STYLE.prompt };
-    else if (this.message && this.message.until > Date.now()) right = this.message;
+    // Buttons on the right, each labelled with its one-step key.
+    const keys = this.cfg.shortKeys;
+    const plan = (withKeys: boolean, buttons: typeof BUTTONS) =>
+      buttons.map((bt) => ` ${bt.label}${withKeys && keys ? ` ${bt.key}` : ''} `);
+    let labels = plan(true, BUTTONS);
+    let shown = BUTTONS;
+    const width = (ls: string[]) => ls.reduce((w, l) => w + textWidth(l) + 1, 0);
+    const minMiddle = 24;
+    if (width(labels) > r.w - x - minMiddle) labels = plan(false, BUTTONS);
+    if (width(labels) > r.w - x - minMiddle) {
+      shown = BUTTONS.filter((bt) => ['fork', 'merge', 'help'].includes(bt.command));
+      labels = plan(false, shown);
+    }
+    let bx = r.w - width(labels);
+    if (bx - x >= 8) {
+      labels.forEach((label, i) => {
+        const x0 = bx;
+        bx = screen.text(bx, r.y, label, STYLE.button);
+        this.statusHits.push({ x0, x1: bx, command: shown[i]!.command });
+        bx += 1;
+      });
+    }
+    const buttonsX = r.w - width(labels);
+
+    // A message, warning or the cost sits between the tabs and the buttons.
+    let middle: { text: string; style: string } | undefined;
+    if (this.busyLabel) middle = { text: `⋯ ${this.busyLabel}`, style: STYLE.prompt };
+    else if (this.message && this.message.until > Date.now()) middle = this.message;
     else if (this.overlaps.length) {
       const o = this.overlaps[0]!;
-      right = {
+      middle = {
         text: `!! ${o.file}: ${o.sessions.join(' + ')}${this.overlaps.length > 1 ? ` (+${this.overlaps.length - 1})` : ''}`,
         style: STYLE.warn,
       };
     } else {
-      const total = [...this.costs.values()].reduce((s, c) => s + c.usd, 0);
-      const cost = total ? `$${total.toFixed(2)} est · ` : '';
-      const hints = 'ctrl+\\ then  f fork · m merge · d diff · x delete · ? help';
-      const room = r.w - x - 4;
-      right = {
-        text: cost + (textWidth(cost + hints) <= room ? hints : 'ctrl+\\ ? help'),
-        style: STYLE.statusDim,
-      };
+      const total = [...this.costs.values()].reduce((sum, c) => sum + c.usd, 0);
+      if (total) middle = { text: `$${total.toFixed(2)} est`, style: STYLE.statusDim };
     }
-    const room = r.w - x - 2;
-    if (room > 4) {
-      const t = ` ${truncate(right.text, room - 2)} `;
-      screen.text(r.w - textWidth(t), r.y, t, right.style);
+    if (!middle) return;
+    const room = buttonsX - x - 3;
+    const full = ` ${middle.text} `;
+    if (textWidth(full) <= room) {
+      screen.text(buttonsX - 1 - textWidth(full), r.y, full, middle.style);
+    } else {
+      // Too long to fit beside the buttons: the message covers them until it expires.
+      this.statusHits = this.statusHits.filter((h) => !h.command);
+      screen.fill({ x: x + 1, y: r.y, w: r.w - x - 1, h: 1 }, ' ', STYLE.status);
+      const t = ` ${truncate(middle.text, r.w - x - 4)} `;
+      screen.text(r.w - textWidth(t) - 1, r.y, t, middle.style);
     }
   }
 

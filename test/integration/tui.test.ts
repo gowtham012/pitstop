@@ -342,4 +342,28 @@ describe('pit split-pane UI', () => {
     expect(out).toContain('deleted one (and its record)');
     expect(listBranches(repoId)).toEqual([]);
   });
+
+  it('forks with F2, ⌥F or the + Fork button', async () => {
+    d = drive(repo);
+    await d.waitFor(/fake claude session/);
+    await d.waitFor(/\+ Fork F2/);
+
+    d.send('\x1bOQ'); // F2
+    await d.waitFor(/fork of main · no preset/);
+    d.send('\x1b');
+    await d.waitFor(/\+ Fork F2/);
+
+    d.send('ƒ'); // what ⌥F types on a Mac
+    await d.waitFor(/fork of main · no preset/);
+    d.send('\x1b');
+    await d.waitFor(/\+ Fork F2/);
+
+    const lines = d.screen().split('\n');
+    const y = lines.length - 1;
+    const x = lines[y]!.indexOf('+ Fork');
+    d.send(`\x1b[<0;${x + 2};${y + 1}M\x1b[<0;${x + 2};${y + 1}m`);
+    await d.waitFor(/fork of main · no preset/);
+    d.send('click fork\r');
+    await d.waitFor(/2 . click-fork/);
+  });
 });

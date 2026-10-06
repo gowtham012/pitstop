@@ -88,7 +88,7 @@ Any flags after `pit` are passed to `claude`, for example `pit --model sonnet`. 
 
 Say the main session is busy running a long test suite, and you need a bug fixed right now.
 
-1. Press `ctrl+\`, release, then press `f`. A prompt appears at the bottom:
+1. Press **F2**, or click **+ Fork** in the bottom bar (on a Mac, ⌥F works too). A prompt appears at the bottom:
 
    ```text
    fork of main · no preset (Tab) · task: _
@@ -105,7 +105,7 @@ Say the main session is busy running a long test suite, and you need a bug fixed
    - it works in its own git worktree, `.claude/worktrees/pit-fix-the-500-on-login`, which starts from your current files, including uncommitted changes;
    - it commits its work on the branch `pit/fix-the-500-on-login`.
 
-Keys you type now go to the fork, because it has focus. Press `ctrl+\` `←` to go back to main, or click a pane.
+Keys you type now go to the fork, because it has focus. Click a pane or a tab in the bottom bar to switch, or press `ctrl+\` `←`.
 
 **Presets.** Press Tab in the fork prompt to cycle through presets, or type `name: task`:
 
@@ -117,18 +117,20 @@ Keys you type now go to the fork, because it has focus. Press `ctrl+\` `←` to 
 | `codex`   | runs Codex CLI in the fork's worktree, if installed             |
 | `gemini`  | runs Gemini CLI in the fork's worktree, if installed            |
 
-**Background forks.** `ctrl+\` `b` forks without opening a pane. The status bar shows when it's done.
+**Background forks.** ⌥B (or `ctrl+\` `b`) forks without opening a pane. The status bar shows when it's done.
 
 ## 6. Watch, review and steer the fork
 
-| Do this                                 | Press                         |
-| --------------------------------------- | ----------------------------- |
-| Switch between panes                    | `ctrl+\` `←` `→`, or `1`–`9`  |
-| Make one pane full screen and back      | `ctrl+\` `z`                  |
-| See what the fork changed               | `ctrl+\` `d` (q closes it)    |
-| Give the fork main's newest commits     | `ctrl+\` `p`                  |
-| See every branch, its cost and overlaps | `ctrl+\` `t` (any key closes) |
-| List all keys                           | `ctrl+\` `?`                  |
+Every key below also has a `ctrl+\` form (`ctrl+\` then `f`, `m`, `d`, …) for terminals where F-keys don't reach pitstop.
+
+| Do this                                 | Press                                              |
+| --------------------------------------- | -------------------------------------------------- |
+| Switch between panes                    | click a pane or tab, or `ctrl+\` `←` `→` / `1`–`9` |
+| Make one pane full screen and back      | F9 · ⌥Z                                            |
+| See what the fork changed               | F4 · ⌥D · **Diff** (q closes it)                   |
+| Give the fork main's newest commits     | F6 · ⌥P                                            |
+| See every branch, its cost and overlaps | F5 · ⌥T · **Tree** (any key closes)                |
+| List all keys                           | F1 · ⌥/ · **?**                                    |
 
 Each pane has a frame with its name, state and parent on top and its cost at the bottom. The focused pane's frame is highlighted, and the bar at the bottom lists every session as a tab. States: `●` working, `?` waiting for your answer, `○` idle (finished its turn), `✓` ready (cloud forks) or merged, `×` stopped or deleted. If two sessions edit the same file, the **conflict radar** warns you in the status bar.
 
@@ -136,7 +138,7 @@ You can talk to the fork like any Claude session: switch to its pane and type.
 
 ## 7. Merge it back
 
-When the fork is idle (`○`), press `ctrl+\` `m` (pick the fork if there are several) and confirm with `y`.
+When the fork is idle (`○`), press **F3** or click **Merge** (pick the fork if there are several) and confirm with `y`.
 
 pitstop then:
 
@@ -151,7 +153,7 @@ pitstop then:
 
 ### Delete a fork
 
-If you don't want the fork's work, press `ctrl+\` `x` (or run `pit delete <name>`):
+If you don't want the fork's work, press **F8** or click **Delete** (or run `pit delete <name>`):
 
 - `y` stops the fork and deletes its worktree and branch. Its conversation stays in Claude Code's history, and the fork stays listed as **deleted** in `pit tree --all` and the report.
 - `c` does the same and also deletes the fork's conversation. This can't be undone. Cloud forks are archived from their web page instead, and Codex or Gemini keep their own history.
@@ -160,7 +162,7 @@ If you don't want the fork's work, press `ctrl+\` `x` (or run `pit delete <name>
 
 Merged and deleted forks stay in `pit tree --all` and `pit report` until you clear them:
 
-- in the split screen, press `ctrl+\` `t`, then `c`;
+- in the split screen, press **F5** (or click **Tree**), then `c`;
 - or run `pit delete --finished` (add `--conversation` to delete their conversations too).
 
 Live forks are never touched.
@@ -193,7 +195,7 @@ pit report --html --out forks.html                # as a web page
 pit report --out - | gh pr create --body-file -   # straight into a PR description
 ```
 
-Fork a fork with `pit fork --parent <session id> "task"`, or press `ctrl+\` `f` while the fork's pane has focus.
+Fork a fork with `pit fork --parent <session id> "task"`, or press F2 while the fork's pane has focus.
 
 ## Set up your repo
 

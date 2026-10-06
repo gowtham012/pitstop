@@ -50,6 +50,38 @@ const KEYS: Record<string, Command> = {
 };
 
 /**
+ * One-step shortcuts, no prefix: function keys (both the xterm and the
+ * rxvt/Linux-console spellings of F1-F4), and the symbols macOS terminals
+ * type for Option+letter by default (⌥F types ƒ). Only symbols nobody types
+ * into a prompt are used; letters such as ß or œ are left alone.
+ */
+export const SHORT_KEYS: [string, Command][] = [
+  ['\x1bOP', 'help'],
+  ['\x1b[11~', 'help'],
+  ['\x1bOQ', 'fork'],
+  ['\x1b[12~', 'fork'],
+  ['\x1bOR', 'merge'],
+  ['\x1b[13~', 'merge'],
+  ['\x1bOS', 'diff'],
+  ['\x1b[14~', 'diff'],
+  ['\x1b[15~', 'tree'],
+  ['\x1b[17~', 'pull'],
+  ['\x1b[18~', 'report'],
+  ['\x1b[19~', 'delete'],
+  ['\x1b[20~', 'zoom'],
+  ['ƒ', 'fork'], // ⌥F
+  ['∫', 'bg-fork'], // ⌥B
+  ['µ', 'merge'], // ⌥M
+  ['∂', 'diff'], // ⌥D
+  ['π', 'pull'], // ⌥P
+  ['†', 'tree'], // ⌥T
+  ['≈', 'delete'], // ⌥X
+  ['Ω', 'zoom'], // ⌥Z
+  ['®', 'report'], // ⌥R
+  ['÷', 'help'], // ⌥/
+];
+
+/**
  * Splits raw terminal input into what goes to the focused pane and what is
  * a pitstop command. The prefix byte is ignored inside bracketed pastes, and
  * pressing the prefix twice sends it through literally.
@@ -58,7 +90,10 @@ export class InputRouter {
   private armed = false;
   private inPaste = false;
 
-  constructor(private readonly prefix: number) {}
+  constructor(
+    private readonly prefix: number,
+    private readonly shortKeys = true,
+  ) {}
 
   get waitingForCommand(): boolean {
     return this.armed;
@@ -101,6 +136,16 @@ export class InputRouter {
           release: mouse[4] === 'm',
         });
         i += mouse[0].length;
+        continue;
+      }
+      const short = this.shortKeys
+        ? SHORT_KEYS.find(([seq]) => data.startsWith(seq, i))
+        : undefined;
+      if (short) {
+        flush();
+        this.armed = false;
+        out.push({ type: 'command', command: short[1] });
+        i += short[0].length;
         continue;
       }
       if (this.armed) {
