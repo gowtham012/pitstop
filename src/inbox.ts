@@ -55,11 +55,27 @@ export function claimInbox(sessionId: string): InboxMessage[] {
   return out;
 }
 
+const MAX_FILES = 50;
+
+/**
+ * Make fork-controlled text safe to place inside the parent's context: no
+ * control characters, no angle brackets (so a crafted file name can't close
+ * the <pitstop-update> block and pose as instructions), bounded length.
+ */
+export function sanitizeForContext(s: string, maxLen = 4000, keepNewlines = true): string {
+  let out = s.replace(keepNewlines ? /[\x00-\x09\x0b-\x1f\x7f]/g : /[\x00-\x1f\x7f]/g, ' ').replace(/[<>]/g, (c) => (c === '<' ? '‹' : '›'));
+  if (out.length > maxLen) out = `${out.slice(0, maxLen)}…`;
+  return out;
+}
+
 export function formatInbox(msgs: InboxMessage[]): string {
   return msgs
     .map((m) => {
-      const files = m.files?.length ? `\nFiles: ${m.files.join(', ')}` : '';
-      return `<pitstop-update from="${m.from}" kind="${m.kind}">\n${m.text}${files}\n</pitstop-update>`;
+      const files = (m.files ?? []).slice(0, MAX_FILES).map((f) => sanitizeForContext(f, 300, false));
+      const more = (m.files?.length ?? 0) > MAX_FILES ? ` (+${m.files!.length - MAX_FILES} more)` : '';
+      const fileLine = files.length ? `\nFiles: ${files.join(', ')}${more}` : '';
+      const from = sanitizeForContext(m.from, 80, false).replace(/"/g, "'");
+      return `<pitstop-update from="${from}" kind="${m.kind}">\n${sanitizeForContext(m.text)}${fileLine}\n</pitstop-update>`;
     })
     .join('\n\n');
 }

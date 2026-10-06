@@ -54,8 +54,8 @@ export function parentDirOf(b: BranchRecord): string {
 }
 
 function changedFiles(cwd: string, from: string, to: string): string[] {
-  const res = git(['diff', '--name-only', `${from}..${to}`], cwd);
-  return res.code === 0 ? res.stdout.split('\n').filter(Boolean) : [];
+  const res = git(['diff', '--name-only', '-z', `${from}..${to}`], cwd);
+  return res.code === 0 ? res.stdout.split('\0').filter(Boolean) : [];
 }
 
 function noteText(b: BranchRecord, strategy: MergeStrategy, files: string[], reason: string): string {

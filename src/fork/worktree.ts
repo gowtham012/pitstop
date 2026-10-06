@@ -4,7 +4,7 @@ import path from 'node:path';
 import { type BranchRecord } from '../branches.js';
 import { type SetupConfig } from '../core/config.js';
 import { branchExists, git, gitOk, worktreeAdd } from '../core/git.js';
-import { logsDir } from '../core/paths.js';
+import { isInside, logsDir } from '../core/paths.js';
 
 export function forkWorktreePath(repoTop: string, name: string): string {
   return path.join(repoTop, '.claude', 'worktrees', `pit-${name}`);
@@ -47,18 +47,35 @@ export function createForkWorktree(branch: BranchRecord, setup: SetupConfig = {}
   return dir;
 }
 
+/**
+ * Resolve a setup entry to a source inside the main checkout, or undefined
+ * when it is absolute, climbs out with "..", or is a symlink that leads
+ * outside the repository (so .pitstop.json can't pull in ~/.ssh and the like).
+ */
+export function safeSetupSource(repoTop: string, rel: string): string | undefined {
+  if (!rel || path.isAbsolute(rel) || rel.split(/[\\/]/).includes('..')) return undefined;
+  const src = path.join(repoTop, rel);
+  if (!fs.existsSync(src)) return undefined;
+  try {
+    const real = fs.realpathSync(src);
+    return isInside(real, fs.realpathSync(repoTop)) ? src : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Copy or symlink files the fork needs but git doesn't track, then start the setup command. */
 export function applySetup(branch: BranchRecord, dir: string, setup: SetupConfig): void {
   for (const rel of setup.copy ?? []) {
-    const src = path.join(branch.repoTop, rel);
-    if (!fs.existsSync(src)) continue;
+    const src = safeSetupSource(branch.repoTop, rel);
+    if (!src) continue;
     fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
     fs.cpSync(src, path.join(dir, rel), { recursive: true });
   }
   for (const rel of setup.symlink ?? []) {
-    const src = path.join(branch.repoTop, rel);
+    const src = safeSetupSource(branch.repoTop, rel);
     const dst = path.join(dir, rel);
-    if (!fs.existsSync(src) || fs.existsSync(dst)) continue;
+    if (!src || fs.existsSync(dst)) continue;
     fs.mkdirSync(path.dirname(dst), { recursive: true });
     fs.symlinkSync(src, dst);
   }
@@ -77,9 +94,12 @@ export function applySetup(branch: BranchRecord, dir: string, setup: SetupConfig
 }
 
 /** Default WorktreeCreate behavior for sessions pitstop doesn't know about. */
-export function createPlainWorktree(cwd: string, name: string): string {
+export function createPlainWorktree(cwd: string, rawName: string): string {
+  const name = rawName.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^[.-]+/, '').slice(0, 64) || 'worktree';
   const top = gitOk(['rev-parse', '--show-toplevel'], cwd);
-  const dir = path.join(top, '.claude', 'worktrees', name);
+  const root = path.join(top, '.claude', 'worktrees');
+  const dir = path.join(root, name);
+  if (!isInside(dir, root) || dir === root) throw new Error(`Refusing worktree name "${rawName}"`);
   if (isWorktree(dir)) return dir;
   excludeWorktreesDir(top);
   const branch = branchExists(top, `worktree-${name}`) ? undefined : `worktree-${name}`;

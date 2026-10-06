@@ -3,10 +3,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { listBranches, loadBranch, saveBranch, upsertSession } from '../../src/branches.js';
+import { trustRepoCommands } from '../../src/core/config.js';
 import { repoContext } from '../../src/core/git.js';
 import { snapshotWorkingTree } from '../../src/core/snapshot.js';
 import { withLock } from '../../src/core/store.js';
 import { forkSession } from '../../src/fork/fork.js';
+import { createPlainWorktree, safeSetupSource } from '../../src/fork/worktree.js';
 import { handleHook } from '../../src/hook/entry.js';
 import { claimInbox, sendInbox } from '../../src/inbox.js';
 import { discardBranch, mergeBranch, pullFromParent } from '../../src/merge/merge.js';
@@ -224,6 +226,7 @@ describe('merge', () => {
     seedMain();
     write(repo, '.pitstop.json', JSON.stringify({ test: 'test -f must-exist.txt', testGate: true }));
     commit(repo, 'cfg');
+    trustRepoCommands(repo, { test: 'test -f must-exist.txt' });
     const b = await forkWithWork('gated', { 'x.py': '1\n' });
     const res = await mergeBranch(repo, b.name);
     expect(res.strategy).toBe('blocked');
@@ -274,6 +277,53 @@ describe('merge', () => {
     expect(sh('git', ['branch', '--list', b.gitBranch], repo)).toBe('');
   });
 });
+
+describe('repo config safety', () => {
+  it('ignores repo commands until the user trusts them', async () => {
+    seedMain();
+    write(repo, '.pitstop.json', JSON.stringify({ test: 'false', testGate: true }));
+    commit(repo, 'cfg');
+    const b = await forkWithWorkTop('untrusted gate', { 'y.py': '1\n' });
+    const res = await mergeBranch(repo, b.name);
+    expect(res.strategy).toBe('commit'); // gate command dropped, not run
+    expect(res.gate).toBeUndefined();
+  });
+
+  it('only copies setup files that stay inside the repo', () => {
+    write(repo, 'inside.env', 'A=1\n');
+    expect(safeSetupSource(repo, 'inside.env')).toBe(path.join(repo, 'inside.env'));
+    expect(safeSetupSource(repo, '../outside')).toBeUndefined();
+    expect(safeSetupSource(repo, '/etc/passwd')).toBeUndefined();
+    fs.symlinkSync('/etc', path.join(repo, 'link'));
+    expect(safeSetupSource(repo, 'link')).toBeUndefined();
+  });
+
+  it('sanitizes worktree names from Claude Code', () => {
+    const dir = createPlainWorktree(repo, '../../escape me');
+    expect(dir).toBe(path.join(repo, '.claude', 'worktrees', 'escape-me'));
+  });
+
+  it('blocks writes through a symlink that leads into the main checkout', async () => {
+    seedMain();
+    const b = await forkSession({ cwd: repo, parentSessionId: MAIN, task: 'symlink', mode: 'pane' });
+    const wt = startWorking(b.sessionId!, {});
+    fs.symlinkSync(repo, path.join(wt, 'parent'));
+    const out = handleHook('PreToolUse', {
+      session_id: b.sessionId!, cwd: wt, tool_name: 'Write', tool_input: { file_path: path.join(wt, 'parent', 'app.py') },
+    });
+    expect(JSON.parse(out.stdout!).hookSpecificOutput.permissionDecision).toBe('deny');
+    const cd = handleHook('PreToolUse', {
+      session_id: b.sessionId!, cwd: wt, tool_name: 'Bash', tool_input: { command: 'cd ../../.. && git stash' },
+    });
+    expect(JSON.parse(cd.stdout!).hookSpecificOutput.permissionDecision).toBe('deny');
+  });
+});
+
+async function forkWithWorkTop(task: string, files: Record<string, string>) {
+  const b = await forkSession({ cwd: repo, parentSessionId: MAIN, task, mode: 'pane' });
+  startWorking(b.sessionId!, files);
+  return loadBranch(b.repoId, b.name)!;
+}
 
 describe('locks', () => {
   it('serializes critical sections', async () => {

@@ -1,6 +1,7 @@
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { pitstopHome } from './paths.js';
-import { readJson } from './store.js';
+import { readJson, writeJsonAtomic } from './store.js';
 
 export type PermissionMode = 'acceptEdits' | 'auto' | 'bypassPermissions' | 'manual' | 'dontAsk' | 'plan';
 
@@ -61,7 +62,7 @@ export const DEFAULT_CONFIG: PitConfig = {
   portStep: 100,
 };
 
-type PartialConfig = Partial<Omit<PitConfig, 'merge' | 'setup'>> & {
+export type PartialConfig = Partial<Omit<PitConfig, 'merge' | 'setup'>> & {
   merge?: Partial<PitConfig['merge']>;
   setup?: SetupConfig;
 };
@@ -77,11 +78,80 @@ export function mergeConfig(base: PitConfig, over: PartialConfig | undefined): P
   };
 }
 
-/** Defaults, then ~/.pitstop/config.json, then <repo>/.pitstop.json. */
-export function loadConfig(repoTop?: string): PitConfig {
+/** Permission modes a repository's own .pitstop.json may not grant: only the user's config can. */
+const ELEVATED_MODES: PermissionMode[] = ['bypassPermissions', 'dontAsk'];
+
+export interface RepoCommands {
+  test?: string;
+  setupRun?: string;
+}
+
+/** The commands a repo's .pitstop.json asks pitstop to run. */
+export function repoCommands(repoCfg: PartialConfig | undefined): RepoCommands {
+  return { test: repoCfg?.test, setupRun: repoCfg?.setup?.run };
+}
+
+function commandsHash(cmds: RepoCommands): string {
+  return crypto.createHash('sha256').update(JSON.stringify([cmds.test ?? null, cmds.setupRun ?? null])).digest('hex');
+}
+
+function trustFile(repoTop: string): string {
+  return path.join(pitstopHome(), 'trusted', `${crypto.createHash('sha1').update(repoTop).digest('hex').slice(0, 16)}.json`);
+}
+
+/** True when the user approved exactly these repo commands with `pit trust`. */
+export function repoCommandsTrusted(repoTop: string, cmds: RepoCommands): boolean {
+  if (!cmds.test && !cmds.setupRun) return true;
+  return readJson<{ hash: string }>(trustFile(repoTop))?.hash === commandsHash(cmds);
+}
+
+export function trustRepoCommands(repoTop: string, cmds: RepoCommands): void {
+  writeJsonAtomic(trustFile(repoTop), { repoTop, hash: commandsHash(cmds), ...cmds, trustedAt: new Date().toISOString() });
+}
+
+export function readRepoConfig(repoTop: string): PartialConfig | undefined {
+  return readJson<PartialConfig>(path.join(repoTop, '.pitstop.json'));
+}
+
+/**
+ * Strip what a cloned repository must not be able to do on its own: run
+ * commands the user hasn't approved, or hand forks elevated permissions.
+ */
+export function sanitizeRepoConfig(repoCfg: PartialConfig, trusted: boolean): { cfg: PartialConfig; dropped: string[] } {
+  const dropped: string[] = [];
+  const cfg: PartialConfig = { ...repoCfg, setup: { ...repoCfg.setup } };
+  if (!trusted) {
+    if (cfg.test) dropped.push(`test command "${cfg.test}"`);
+    if (cfg.setup?.run) dropped.push(`setup command "${cfg.setup.run}"`);
+    delete cfg.test;
+    if (cfg.setup) delete cfg.setup.run;
+  }
+  if (cfg.presets) {
+    const presets: Record<string, Preset> = {};
+    for (const [name, p] of Object.entries(cfg.presets)) {
+      if (p.permissionMode && ELEVATED_MODES.includes(p.permissionMode)) {
+        dropped.push(`permissionMode "${p.permissionMode}" in preset "${name}"`);
+        presets[name] = { ...p, permissionMode: undefined };
+      } else presets[name] = p;
+    }
+    cfg.presets = presets;
+  }
+  return { cfg, dropped };
+}
+
+/**
+ * Defaults, then ~/.pitstop/config.json, then <repo>/.pitstop.json. The repo
+ * layer is sanitized: its commands need `pit trust`, and it can't grant
+ * elevated permission modes.
+ */
+export function loadConfig(repoTop?: string): PitConfig & { untrusted?: string[] } {
   let cfg = mergeConfig(DEFAULT_CONFIG, readJson<PartialConfig>(path.join(pitstopHome(), 'config.json')));
-  if (repoTop) cfg = mergeConfig(cfg, readJson<PartialConfig>(path.join(repoTop, '.pitstop.json')));
-  return cfg;
+  if (!repoTop) return cfg;
+  const repoCfg = readRepoConfig(repoTop);
+  if (!repoCfg) return cfg;
+  const { cfg: safe, dropped } = sanitizeRepoConfig(repoCfg, repoCommandsTrusted(repoTop, repoCommands(repoCfg)));
+  cfg = mergeConfig(cfg, safe);
+  return dropped.length ? { ...cfg, untrusted: dropped } : cfg;
 }
 
 /** Map a prefix like "ctrl+\\" or "ctrl+a" to the single byte the terminal sends. */
