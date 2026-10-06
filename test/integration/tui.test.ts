@@ -83,7 +83,7 @@ describe('pit split-pane UI', () => {
   it('starts main, forks into a split pane with the hotkey, and quits leaving sessions running', async () => {
     d = drive(repo);
     await d.waitFor(/fake claude session/);
-    await d.waitFor(/1 ● main|1 · main/);
+    await d.waitFor(/1 [●○] main/);
     expect(fakeAgents(env.fakeState)).toHaveLength(1);
 
     d.send(PREFIX);

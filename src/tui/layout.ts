@@ -7,9 +7,13 @@ export interface Rect {
 
 export interface PaneSlot {
   id: string;
-  /** Whole pane including its one-row header. */
+  /** Whole pane including its frame. */
   rect: Rect;
+  /** Top frame row: name and state. */
   header: Rect;
+  /** Bottom frame row: cost and notices. */
+  footer: Rect;
+  /** Inside the frame: the hosted terminal. */
   body: Rect;
 }
 
@@ -28,20 +32,26 @@ export interface Layout {
   panes: PaneSlot[];
   /** Sessions that are running but not shown (reachable from the status bar). */
   hidden: string[];
-  /** Vertical or horizontal divider cells between main and the fork column. */
-  divider?: Rect;
   status: Rect;
   orientation: 'side' | 'stacked' | 'single';
 }
 
 const MIN_BODY = 3;
+/** Rows a frame takes: top and bottom border. */
+const FRAME_ROWS = 2;
 
 function slot(id: string, rect: Rect): PaneSlot {
   return {
     id,
     rect,
     header: { x: rect.x, y: rect.y, w: rect.w, h: 1 },
-    body: { x: rect.x, y: rect.y + 1, w: rect.w, h: Math.max(0, rect.h - 1) },
+    footer: { x: rect.x, y: rect.y + Math.max(1, rect.h - 1), w: rect.w, h: 1 },
+    body: {
+      x: rect.x + 1,
+      y: rect.y + 1,
+      w: Math.max(0, rect.w - 2),
+      h: Math.max(0, rect.h - FRAME_ROWS),
+    },
   };
 }
 
@@ -77,21 +87,20 @@ export function computeLayout(l: LayoutInput): Layout {
     return { panes: [slot(main, area)], hidden: [], status, orientation: 'single' };
 
   const side = cols >= l.splitColumns;
-  const forkSpace = side ? area.h : area.h - Math.ceil(area.h / 2) - 1;
-  const maxByHeight = Math.max(1, Math.floor(forkSpace / (MIN_BODY + 1)));
+  const forkSpace = side ? area.h : area.h - Math.ceil(area.h / 2);
+  const maxByHeight = Math.max(1, Math.floor(forkSpace / (MIN_BODY + FRAME_ROWS)));
   let visible = forks.slice(0, Math.min(Math.max(1, l.visibleForks), maxByHeight));
   if (l.focus && forks.includes(l.focus) && !visible.includes(l.focus)) {
     visible = [...visible.slice(0, -1), l.focus];
   }
   const hidden = forks.filter((f) => !visible.includes(f));
   const panes: PaneSlot[] = [];
-  let divider: Rect;
 
+  // Frames sit edge to edge, so no divider is needed between them.
   if (side) {
-    const mainW = Math.floor((cols - 1) / 2);
+    const mainW = Math.floor(cols / 2);
     panes.push(slot(main, { x: 0, y: 0, w: mainW, h: area.h }));
-    divider = { x: mainW, y: 0, w: 1, h: area.h };
-    const forkX = mainW + 1;
+    const forkX = mainW;
     const heights = split(area.h, visible.length);
     let y = 0;
     visible.forEach((id, i) => {
@@ -101,13 +110,12 @@ export function computeLayout(l: LayoutInput): Layout {
   } else {
     const mainH = Math.ceil(area.h / 2);
     panes.push(slot(main, { x: 0, y: 0, w: cols, h: mainH }));
-    divider = { x: 0, y: mainH, w: cols, h: 1 };
-    const heights = split(area.h - mainH - 1, visible.length);
-    let y = mainH + 1;
+    const heights = split(area.h - mainH, visible.length);
+    let y = mainH;
     visible.forEach((id, i) => {
       panes.push(slot(id, { x: 0, y, w: cols, h: heights[i]! }));
       y += heights[i]!;
     });
   }
-  return { panes, hidden, divider, status, orientation: side ? 'side' : 'stacked' };
+  return { panes, hidden, status, orientation: side ? 'side' : 'stacked' };
 }

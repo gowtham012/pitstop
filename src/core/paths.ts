@@ -41,13 +41,17 @@ export function repoIdFor(gitCommonDir: string): string {
 
 /** Turn a task description into a short branch-safe name. */
 export function slugify(text: string, max = 32): string {
-  const slug = text
+  const full = text
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, max)
-    .replace(/-+$/g, '');
-  return slug || 'fork';
+    .replace(/^-+|-+$/g, '');
+  let slug = full.slice(0, max);
+  // Cut at a word boundary rather than mid-word, when that keeps most of it.
+  if (full.length > max && full[max] !== '-') {
+    const cut = slug.lastIndexOf('-');
+    if (cut >= max / 2) slug = slug.slice(0, cut);
+  }
+  return slug.replace(/-+$/g, '') || 'fork';
 }
 
 /** True when `child` is `parent` or lives somewhere below it. */

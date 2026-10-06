@@ -19,18 +19,19 @@ describe('layout', () => {
     expect(l.orientation).toBe('side');
     const [m, a, b] = l.panes;
     expect(m!.rect).toEqual({ x: 0, y: 0, w: 100, h: 40 });
-    expect(l.divider).toEqual({ x: 100, y: 0, w: 1, h: 40 });
-    expect(a!.rect).toEqual({ x: 101, y: 0, w: 100, h: 20 });
-    expect(b!.rect).toEqual({ x: 101, y: 20, w: 100, h: 20 });
-    expect(a!.body).toEqual({ x: 101, y: 1, w: 100, h: 19 });
+    expect(a!.rect).toEqual({ x: 100, y: 0, w: 101, h: 20 });
+    expect(b!.rect).toEqual({ x: 100, y: 20, w: 101, h: 20 });
+    // the frame takes one cell on each side
+    expect(a!.body).toEqual({ x: 101, y: 1, w: 99, h: 18 });
+    expect(a!.header).toEqual({ x: 100, y: 0, w: 101, h: 1 });
+    expect(a!.footer).toEqual({ x: 100, y: 19, w: 101, h: 1 });
   });
 
   it('stacks main above the forks on narrow terminals', () => {
     const l = computeLayout({ ...base, cols: 100, rows: 41, ids: ['m', 'a'] });
     expect(l.orientation).toBe('stacked');
     expect(l.panes[0]!.rect).toEqual({ x: 0, y: 0, w: 100, h: 20 });
-    expect(l.divider).toEqual({ x: 0, y: 20, w: 100, h: 1 });
-    expect(l.panes[1]!.rect).toEqual({ x: 0, y: 21, w: 100, h: 19 });
+    expect(l.panes[1]!.rect).toEqual({ x: 0, y: 20, w: 100, h: 20 });
   });
 
   it('turns forks past the visible limit into tabs, and swaps a focused hidden fork in', () => {

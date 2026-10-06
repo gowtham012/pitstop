@@ -30,7 +30,7 @@ import { collectTouched, findOverlaps, overlapKey, type Overlap } from '../radar
 import { buildReport, writeReport } from '../report.js';
 import { sessionCost, sessionState, stateGlyph, treeLines, type CostInfo } from '../status.js';
 import { firstKeyLength, InputRouter, LineEditor, type Command } from './input.js';
-import { computeLayout, type Layout } from './layout.js';
+import { computeLayout, type Layout, type PaneSlot } from './layout.js';
 import { Pane } from './pane.js';
 import { tuiPidFile } from './presence.js';
 import { diffScreens, Screen, STYLE, textWidth, truncate } from './screen.js';
@@ -93,6 +93,25 @@ const HELP = [
   'In the fork prompt, Tab cycles presets: hotfix, explore, cloud, codex, gemini, …',
   'ctrl+\\ twice sends ctrl+\\ to the pane. Click a pane to focus it.',
 ];
+
+function stateStyle(state: string): string {
+  switch (state) {
+    case 'working':
+    case 'running':
+    case 'starting':
+      return STYLE.stateWorking;
+    case 'needs input':
+      return STYLE.stateNeeds;
+    case 'ready':
+    case 'merged':
+      return STYLE.stateDone;
+    case 'stopped':
+    case 'failed':
+      return STYLE.stateStopped;
+    default:
+      return STYLE.stateIdle;
+  }
+}
 
 /** pitstop's split-pane terminal UI. */
 export class App {
@@ -1011,34 +1030,8 @@ export class App {
     for (const slot of layout.panes) {
       const pane = this.panes.get(slot.id);
       if (!pane) continue;
-      this.drawHeader(screen, slot.id, slot.header);
       screen.blit(pane.term, slot.body);
-      if (pane.exited && pane.kind === 'session') {
-        screen.text(
-          slot.body.x + 1,
-          slot.body.y,
-          ' detached · ctrl+\\ r to re-attach ',
-          STYLE.warn,
-          slot.body.w - 2,
-        );
-      } else if (pane.inAgentView) {
-        screen.text(
-          slot.body.x + 1,
-          slot.body.y,
-          ' agent view · Enter returns, or ctrl+\\ r ',
-          STYLE.warn,
-          slot.body.w - 2,
-        );
-      }
-    }
-    if (layout.divider) {
-      const d = layout.divider;
-      if (d.w === 1)
-        for (let y = d.y; y < d.y + d.h; y++)
-          screen.set(d.x, y, { ch: '│', w: 1, sgr: STYLE.divider });
-      else
-        for (let x = d.x; x < d.x + d.w; x++)
-          screen.set(x, d.y, { ch: '─', w: 1, sgr: STYLE.divider });
+      this.drawFrame(screen, slot);
     }
     this.drawStatus(screen, layout);
     if (this.overlay) this.drawOverlay(screen);
@@ -1067,11 +1060,26 @@ export class App {
     return `\x1b[${y + 1};${x + 1}H\x1b[?25h`;
   }
 
-  private drawHeader(screen: Screen, id: string, r: { x: number; y: number; w: number }): void {
-    const isMain = id === this.main.sessionId;
+  /** Rounded frame: name, state and parent in the top border; notices and cost in the bottom one. */
+  private drawFrame(screen: Screen, slot: PaneSlot): void {
+    const { id, rect: r } = slot;
     const focused = id === this.focus;
-    const style = focused ? STYLE.headerFocus : isMain ? STYLE.headerMain : STYLE.header;
-    screen.fill({ x: r.x, y: r.y, w: r.w, h: 1 }, ' ', style);
+    const isMain = id === this.mainPaneId;
+    const border = focused ? STYLE.frameFocus : STYLE.frame;
+    const right = r.x + r.w - 1;
+    const top = r.y;
+    const bottom = slot.footer.y;
+    screen.fill({ x: r.x + 1, y: top, w: r.w - 2, h: 1 }, '─', border);
+    screen.fill({ x: r.x + 1, y: bottom, w: r.w - 2, h: 1 }, '─', border);
+    for (let y = top + 1; y < bottom; y++) {
+      screen.set(r.x, y, { ch: '│', w: 1, sgr: border });
+      screen.set(right, y, { ch: '│', w: 1, sgr: border });
+    }
+    screen.set(r.x, top, { ch: '╭', w: 1, sgr: border });
+    screen.set(right, top, { ch: '╮', w: 1, sgr: border });
+    screen.set(r.x, bottom, { ch: '╰', w: 1, sgr: border });
+    screen.set(right, bottom, { ch: '╯', w: 1, sgr: border });
+
     const pane = this.panes.get(id);
     const b = this.branchByPane(id);
     const state =
@@ -1079,18 +1087,51 @@ export class App {
         ? 'running'
         : sessionState(pane?.kind === 'session' ? this.agents.get(id) : undefined, b);
     const idx = this.order.indexOf(id) + 1;
-    const where =
-      b && branchKind(b) === 'agent'
-        ? ` · ${b.agent}`
-        : b && branchKind(b) === 'cloud'
-          ? ' · cloud'
-          : '';
-    const parent = b ? `${where} · fork of ${b.parentBranch ?? 'main'}` : '';
+    const kind = b ? branchKind(b) : undefined;
+    const parent = b
+      ? `${kind === 'agent' ? `${b.agent} · ` : kind === 'cloud' ? 'cloud · ' : ''}fork of ${b.parentBranch ?? 'main'}`
+      : '';
+    const titleStyle = focused ? STYLE.titleFocus : isMain ? STYLE.titleMain : STYLE.title;
+    this.borderSegments(screen, r.x + 1, top, right - 1, [
+      { text: `${idx > 0 ? `${idx} ` : ''}${this.label(id)}`, style: titleStyle },
+      { text: `${stateGlyph(state)} ${state}`, style: stateStyle(state) },
+      ...(parent ? [{ text: parent, style: STYLE.meta }] : []),
+    ]);
+
+    const notice =
+      pane?.exited && pane.kind === 'session'
+        ? 'detached · ctrl+\\ r to re-attach'
+        : pane?.inAgentView
+          ? 'agent view · Enter returns, or ctrl+\\ r'
+          : this.zoom === id
+            ? 'zoomed · ctrl+\\ z to split'
+            : '';
     const cost = this.costs.get(id);
-    const right = `${state}${cost ? ` · $${cost.usd.toFixed(2)}` : ''} `;
-    const left = ` ${idx} ${stateGlyph(state)} ${this.label(id)}${parent}`;
-    screen.text(r.x, r.y, truncate(left, r.w - textWidth(right) - 1), style);
-    screen.text(r.x + Math.max(0, r.w - textWidth(right)), r.y, right, style);
+    const costText = cost ? ` $${cost.usd.toFixed(2)} ` : '';
+    const costX = right - 1 - textWidth(costText);
+    if (costText && costX > r.x + 2) screen.text(costX, bottom, costText, STYLE.meta);
+    if (notice)
+      this.borderSegments(screen, r.x + 1, bottom, (costText ? costX : right) - 1, [
+        { text: notice, style: STYLE.notice },
+      ]);
+  }
+
+  /** Write ` text ` segments into a border row, joined by the border line, clipped at `maxX`. */
+  private borderSegments(
+    screen: Screen,
+    x: number,
+    y: number,
+    maxX: number,
+    segs: { text: string; style: string }[],
+  ): void {
+    x += 1;
+    for (const [i, seg] of segs.entries()) {
+      if (i > 0) x += 1; // one border cell between segments
+      const room = maxX - x;
+      if (room < 4) return;
+      const t = ` ${truncate(seg.text, room - 2)} `;
+      x = screen.text(x, y, t, seg.style, room);
+    }
   }
 
   private drawStatus(screen: Screen, layout: Layout): void {
@@ -1109,13 +1150,13 @@ export class App {
       if (!kind || kind === 'command') return;
       const state = sessionState(this.agents.get(id), this.branchByPane(id));
       const hidden = layout.hidden.includes(id);
-      const text = ` ${i + 1} ${this.label(id)} ${stateGlyph(state)}${hidden ? ' ⋯' : ''} `;
-      const style =
-        id === this.focus
-          ? STYLE.statusFocus
-          : id === this.main.sessionId
-            ? STYLE.statusMain
-            : STYLE.statusFork;
+      const focused = id === this.focus;
+      const text = `${focused ? '▸' : ' '}${i + 1} ${stateGlyph(state)} ${this.label(id)}${hidden ? ' ⋯' : ''} `;
+      const style = focused
+        ? STYLE.statusFocus
+        : id === this.mainPaneId
+          ? STYLE.statusMain
+          : STYLE.statusFork;
       const x0 = x;
       x = screen.text(x, r.y, text, style, Math.max(0, r.w - x - 30));
       this.statusHits.push({ x0, x1: x, id });
@@ -1146,9 +1187,12 @@ export class App {
       };
     } else {
       const total = [...this.costs.values()].reduce((s, c) => s + c.usd, 0);
+      const cost = total ? `$${total.toFixed(2)} est · ` : '';
+      const hints = 'ctrl+\\ then  f fork · m merge · d diff · x delete · ? help';
+      const room = r.w - x - 4;
       right = {
-        text: `${total ? `$${total.toFixed(2)} est · ` : ''}ctrl+\\ ? help`,
-        style: STYLE.status,
+        text: cost + (textWidth(cost + hints) <= room ? hints : 'ctrl+\\ ? help'),
+        style: STYLE.statusDim,
       };
     }
     const room = r.w - x - 2;
@@ -1174,7 +1218,7 @@ export class App {
       this.cols - 4,
       Math.max(
         textWidth(o.title) + 4,
-        textWidth(footer) + 4,
+        textWidth(footer) + 6,
         ...body.map((l) => textWidth(l) + 4),
         44,
       ),
@@ -1183,13 +1227,25 @@ export class App {
     const x0 = Math.floor((this.cols - width) / 2);
     const y0 = Math.max(0, Math.floor((this.rows - 1 - height) / 2));
     screen.fill({ x: x0, y: y0, w: width, h: height }, ' ', STYLE.overlay);
+    const xr = x0 + width - 1;
+    const yb = y0 + height - 1;
+    screen.fill({ x: x0 + 1, y: y0, w: width - 2, h: 1 }, '─', STYLE.overlayBorder);
+    screen.fill({ x: x0 + 1, y: yb, w: width - 2, h: 1 }, '─', STYLE.overlayBorder);
+    for (let y = y0 + 1; y < yb; y++) {
+      screen.set(x0, y, { ch: '│', w: 1, sgr: STYLE.overlayBorder });
+      screen.set(xr, y, { ch: '│', w: 1, sgr: STYLE.overlayBorder });
+    }
+    screen.set(x0, y0, { ch: '╭', w: 1, sgr: STYLE.overlayBorder });
+    screen.set(xr, y0, { ch: '╮', w: 1, sgr: STYLE.overlayBorder });
+    screen.set(x0, yb, { ch: '╰', w: 1, sgr: STYLE.overlayBorder });
+    screen.set(xr, yb, { ch: '╯', w: 1, sgr: STYLE.overlayBorder });
     screen.text(x0 + 2, y0, ` ${o.title} `, STYLE.overlayTitle, width - 4);
     body
       .slice(0, height - 4)
       .forEach((line, i) =>
         screen.text(x0 + 2, y0 + 2 + i, truncate(line, width - 4), STYLE.overlay),
       );
-    screen.text(x0 + 2, y0 + height - 1, footer, STYLE.overlayTitle, width - 4);
+    screen.text(x0 + 2, yb, ` ${footer} `, STYLE.overlayTitle, width - 4);
   }
 
   // ---- shutdown -----------------------------------------------------------

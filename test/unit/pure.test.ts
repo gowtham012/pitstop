@@ -55,6 +55,9 @@ describe('paths', () => {
     expect(slugify('Fix the login 500 error!!')).toBe('fix-the-login-500-error');
     expect(slugify('***')).toBe('fork');
     expect(slugify('a'.repeat(80)).length).toBeLessThanOrEqual(32);
+    expect(slugify('the /login endpoint returns 500 for SSO users')).toBe(
+      'the-login-endpoint-returns-500',
+    );
   });
 
   it('checks containment without being fooled by shared prefixes', () => {

@@ -130,13 +130,13 @@ Keys you type now go to the fork, because it has focus. Press `ctrl+\` `←` to 
 | See every branch, its cost and overlaps | `ctrl+\` `t` (any key closes) |
 | List all keys                           | `ctrl+\` `?`                  |
 
-The status bar marks each session: `●` working, `?` waiting for your answer, `·` idle (finished its turn), `✓` ready (cloud forks) or merged. If two sessions edit the same file, the **conflict radar** warns you in the status bar.
+Each pane has a frame with its name, state and parent on top and its cost at the bottom. The focused pane's frame is highlighted, and the bar at the bottom lists every session as a tab. States: `●` working, `?` waiting for your answer, `○` idle (finished its turn), `✓` ready (cloud forks) or merged, `×` stopped or deleted. If two sessions edit the same file, the **conflict radar** warns you in the status bar.
 
 You can talk to the fork like any Claude session: switch to its pane and type.
 
 ## 7. Merge it back
 
-When the fork is idle (`·`), press `ctrl+\` `m` (pick the fork if there are several) and confirm with `y`.
+When the fork is idle (`○`), press `ctrl+\` `m` (pick the fork if there are several) and confirm with `y`.
 
 pitstop then:
 
@@ -235,7 +235,7 @@ Your own settings live in `~/.pitstop/config.json` and use the same format. The 
 | "Workspace not trusted"                          | Run `claude` once in that folder and accept the trust prompt.                                     |
 | A pane shows "describe a task for a new session" | You pressed `←` on an empty prompt. Press `ctrl+\` `r` to re-attach.                              |
 | `ctrl+\` does nothing                            | Your terminal or tmux may catch it. Set another key, e.g. `"prefixKey": "ctrl+]"` in your config. |
-| Merge says the fork is "still working"           | Wait until it's idle (`·`), or answer it if it shows `?`. `--force` merges anyway.                |
+| Merge says the fork is "still working"           | Wait until it's idle (`○`), or answer it if it shows `?`. `--force` merges anyway.                |
 | "ignored until you run `pit trust`"              | Read the commands it lists, then run `pit trust`.                                                 |
 
 Still stuck? Open an issue with the output of `pit doctor`: https://github.com/gowtham012/pitstop/issues

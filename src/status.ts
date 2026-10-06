@@ -52,9 +52,9 @@ export function stateGlyph(s: SessionState): string {
       return '↺';
     case 'deleted':
     case 'stopped':
-      return '○';
+      return '×';
     default:
-      return '·';
+      return '○';
   }
 }
 
