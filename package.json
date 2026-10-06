@@ -1,0 +1,49 @@
+{
+  "name": "pitstop-cli",
+  "version": "0.1.0",
+  "description": "Fork a running Claude Code session into a split pane with full context, run urgent tasks side by side, and merge code + knowledge back safely.",
+  "type": "module",
+  "bin": {
+    "pit": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "plugin"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "agents",
+    "fork",
+    "worktree",
+    "tui"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@xterm/headless": "^6.0.0",
+    "commander": "^15.0.0",
+    "node-pty": "^1.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.0.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^5.0.0"
+  }
+}
