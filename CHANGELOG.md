@@ -4,6 +4,16 @@ All notable changes to this project are listed here. The format follows [Keep a 
 
 ## [Unreleased]
 
+### Added
+
+- A [getting started guide](docs/guide.md): install, first fork and merge, presets, repo setup, troubleshooting, update and uninstall.
+
+### Fixed
+
+- Keys typed right after closing an overlay, in the same burst of input, are no longer dropped.
+- Panes failed to start on macOS (`posix_spawnp failed`) because node-pty's `spawn-helper` was installed without the execute bit. pitstop now restores it.
+- The README's install command (`npm install -g github:…`) fails because npm skips the build for global git installs. The README and guide now install from source.
+
 ## [0.1.0] - 2026-10-06
 
 First release.

@@ -63,7 +63,7 @@ await sleep(2000);
 p.write('\x1c');
 await sleep(200);
 p.write('f');
-await waitFor(/task \(/, 10000, 'fork prompt');
+await waitFor(/· task/, 10000, 'fork prompt');
 await type(
   'hotfix: Create a file named hello.txt whose only content is the codename I asked you to remember. Then git commit it.',
 );

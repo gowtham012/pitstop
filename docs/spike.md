@@ -127,6 +127,8 @@ The first run found one gap: the fork stopped on a permission prompt for `git ad
 
 The same run also confirmed that merging a fork that is waiting for input is refused ("still working").
 
+Re-run on 2026-10-06 against Claude Code **2.1.292** after the 0.1.0 fixes, from a fresh `npm install -g .`: every step passed again. The fork wrote `BLUEBIRD-42` from the inherited conversation, the merge landed as a commit, main received both the fork's handoff and the pitstop-update, and the run cost about $0.37.
+
 ## Phase 2: cloud and agent forks
 
 Checked against the Claude Code docs on 2026-10-06 ([cloud sessions](https://code.claude.com/docs/en/claude-code-on-the-web)):

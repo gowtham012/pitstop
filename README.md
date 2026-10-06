@@ -22,7 +22,7 @@ Your main Claude session is twenty minutes into a long task when something urgen
 
 - [How it works](#how-it-works)
 - [What you get](#what-you-get)
-- [Install](#install)
+- [Install](#install) · [Getting started guide](docs/guide.md)
 - [Keys and commands](#keys-and-commands)
 - [Cloud forks and other agents](#cloud-forks-and-other-agents)
 - [Report](#report)
@@ -100,20 +100,29 @@ Claude Code already ships `/fork`, background sessions, worktrees and cross-sess
 
 ## Install
 
+pitstop isn't on npm yet, so install it from source:
+
 ```bash
-npm install -g github:gowtham012/pitstop   # until the first npm release (as pitstop-cli)
-pit doctor                                # checks claude, background sessions and the terminal layer
+git clone https://github.com/gowtham012/pitstop.git
+cd pitstop
+npm install        # dependencies + build
+npm install -g .   # puts `pit` on your PATH
+pit doctor         # checks claude, background sessions and the terminal layer
 ```
 
-Requirements:
-
-- Node 20+, git, and Claude Code with background sessions (`claude agents`). Tested with Claude Code 2.1.291.
-- On Linux, `node-pty` compiles during install, so you need `python3`, `make` and `g++`.
+Then, in any repo:
 
 ```bash
 cd your-repo
 pit            # starts (or reopens) the main session; extra flags are passed to claude
 ```
+
+Requirements:
+
+- macOS or Linux, Node 20+, git, and Claude Code with background sessions (`claude agents`). Tested with Claude Code 2.1.292.
+- On Linux, `node-pty` compiles during install, so you need `python3`, `make` and `g++`.
+
+**New to pitstop? Read the [getting started guide](docs/guide.md).** It walks through installing, your first fork and merge, presets, repo setup, troubleshooting and uninstalling.
 
 ## Keys and commands
 
