@@ -109,7 +109,7 @@ function result(f: ReportFork): string {
   if (b.state === 'merged')
     return `merged: ${b.mergeStrategy ?? 'commit'}${b.note ? `, ${b.note}` : ''}`;
   if (b.state === 'deferred') return `ready, not merged: ${b.note ?? ''}`;
-  if (b.state === 'discarded') return 'discarded';
+  if (b.state === 'discarded') return 'deleted';
   if (b.state === 'failed') return `failed: ${b.note ?? ''}`;
   return `${f.state}${f.uncommitted.length ? `, ${f.uncommitted.length} uncommitted file${f.uncommitted.length === 1 ? '' : 's'}` : ''}`;
 }
@@ -121,8 +121,8 @@ function summaryLine(forks: ReportFork[]): string {
   const count = (pred: (f: ReportFork) => boolean) => forks.filter(pred).length;
   const merged = count((f) => f.branch.state === 'merged');
   const live = count((f) => LIVE_STATES.includes(f.branch.state));
-  const discarded = count((f) => f.branch.state === 'discarded');
-  return `${forks.length} fork${forks.length === 1 ? '' : 's'}: ${merged} merged, ${live} live, ${discarded} discarded`;
+  const deleted = count((f) => f.branch.state === 'discarded');
+  return `${forks.length} fork${forks.length === 1 ? '' : 's'}: ${merged} merged, ${live} live, ${deleted} deleted`;
 }
 
 /** Markdown for a PR description or a chat message. */

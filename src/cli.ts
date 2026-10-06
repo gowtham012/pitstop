@@ -26,7 +26,15 @@ import { ConfirmationNeeded, forkSession, type ForkRequest } from './fork/fork.j
 import { buildReport, renderReportHtml, renderReportMarkdown, writeReport } from './report.js';
 import { tuiRunning } from './tui/presence.js';
 import { loadPty } from './tui/pty.js';
-import { discardBranch, mergeBranch, pullFromParent, type MergeOptions } from './merge/merge.js';
+import {
+  clearHistory,
+  deleteFork,
+  finishedForks,
+  mergeBranch,
+  pullFromParent,
+  type DeleteResult,
+  type MergeOptions,
+} from './merge/merge.js';
 import { collectTouched, findOverlaps } from './radar.js';
 import { sessionCost, sessionState, treeLines, type CostInfo } from './status.js';
 import { VERSION } from './version.js';
@@ -40,6 +48,8 @@ const SUBCOMMANDS = new Set([
   'tree',
   'status',
   'log',
+  'delete',
+  'rm',
   'discard',
   'trust',
   'doctor',
@@ -372,15 +382,67 @@ function buildProgram(): Command {
     });
 
   program
-    .command('discard')
-    .description('stop a fork and delete its worktree and branch (the conversation is kept)')
-    .argument('<name>')
+    .command('delete')
+    .aliases(['rm', 'discard'])
+    .description(
+      'delete a fork: stop it and remove its worktree and branch; --finished clears history',
+    )
+    .argument('[name]')
     .option('--keep-branch', 'keep the git branch')
-    .action((name: string, o: { keepBranch?: boolean }) => {
-      const ctx = requireRepo();
-      discardBranch(ctx.top, name, o.keepBranch);
-      process.stdout.write(`discarded ${name}\n`);
-    });
+    .option('--forget', 'also remove it from `pit tree --all` and the report')
+    .option('--conversation', "also delete the fork's Claude conversation (cannot be undone)")
+    .option('--finished', 'remove every merged and deleted fork from the history')
+    .option('--yes', "don't ask")
+    .action(
+      async (
+        name: string | undefined,
+        o: {
+          keepBranch?: boolean;
+          forget?: boolean;
+          conversation?: boolean;
+          finished?: boolean;
+          yes?: boolean;
+        },
+      ) => {
+        const ctx = requireRepo();
+        const report = (r: DeleteResult) => {
+          process.stdout.write(
+            `deleted ${r.branch.name}${r.forgotten ? ' (and its record)' : ''}\n`,
+          );
+          for (const f of r.removedFiles) process.stdout.write(`  removed ${f}\n`);
+          for (const n of r.notes) process.stdout.write(`  note: ${n}\n`);
+        };
+        if (o.finished) {
+          if (name) fail('give a fork name or --finished, not both');
+          const forks = finishedForks(ctx.top);
+          if (!forks.length) return void process.stdout.write('no merged or deleted forks\n');
+          const what = o.conversation ? ' and their conversations' : '';
+          if (!o.yes) {
+            process.stdout.write(
+              `${forks.map((b) => `  ${b.name} (${b.state === 'merged' ? 'merged' : 'deleted'})`).join('\n')}\n`,
+            );
+            if (!(await askYesNo(`Remove these ${forks.length} forks from the history${what}?`)))
+              fail('nothing removed (pass --yes to skip this question)');
+          }
+          for (const r of await clearHistory(ctx.top, { conversation: o.conversation })) report(r);
+          return;
+        }
+        if (!name) fail('which fork? `pit delete <name>`, or `pit delete --finished`');
+        if (o.conversation && !o.yes) {
+          if (
+            !(await askYesNo(`Delete ${name} and its Claude conversation? This can't be undone.`))
+          )
+            fail('nothing deleted (pass --yes to skip this question)');
+        }
+        report(
+          await deleteFork(ctx.top, name, {
+            keepBranch: o.keepBranch,
+            forget: o.forget,
+            conversation: o.conversation,
+          }),
+        );
+      },
+    );
 
   program
     .command('trust')

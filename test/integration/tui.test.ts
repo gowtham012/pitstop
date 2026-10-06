@@ -7,6 +7,7 @@ import { listBranches } from '../../src/branches.js';
 import { repoContext } from '../../src/core/git.js';
 import { handleHook } from '../../src/hook/entry.js';
 import { loadPty } from '../../src/tui/pty.js';
+import { execFileSync } from 'node:child_process';
 import { fakeAgents, fakeCalls, isolate, makeRepo, write, commit, sh, tmpDir } from '../helpers.js';
 
 const FAKE_AGENT = path.resolve(
@@ -275,5 +276,70 @@ describe('pit split-pane UI', () => {
     const s = await d.waitFor(/report written: \S+\.md/);
     const file = /report written: (\S+\.md)/.exec(s)![1]!;
     expect(fs.readFileSync(file, 'utf8')).toContain('### report-me');
+  });
+
+  it('deletes a fork with ctrl+\\ x (conversation too with c) and clears history from the tree', async () => {
+    d = drive(repo);
+    await d.waitFor(/fake claude session/);
+    d.send(`${PREFIX}f`);
+    await d.waitFor(/task/);
+    d.send('delete me\r');
+    await d.waitFor(/2 . delete-me/);
+    const repoId = repoContext(repo).repoId;
+    const b = listBranches(repoId).find((x) => x.name === 'delete-me')!;
+    const wt = handleHook('WorktreeCreate', {
+      session_id: b.sessionId!,
+      cwd: repo,
+      name: 'x',
+    }).stdout!;
+    const proj = path.join(process.env.CLAUDE_CONFIG_DIR!, 'projects', '-repo');
+    fs.mkdirSync(proj, { recursive: true });
+    const convo = path.join(proj, `${b.sessionId}.jsonl`);
+    fs.writeFileSync(convo, '{}\n');
+
+    d.send(`${PREFIX}x`);
+    await d.waitFor(/Delete delete-me\?/);
+    await d.waitFor(/c delete \+ conversation/);
+    d.send('c');
+    await d.waitFor(/deleted delete-me and its conversation/);
+    expect(fs.existsSync(convo)).toBe(false);
+    expect(fs.existsSync(wt)).toBe(false);
+    expect(d.screen()).not.toMatch(/2 . delete-me/);
+
+    d.send(`${PREFIX}t`);
+    await d.waitFor(/delete-me[^\n]*deleted/);
+    await d.waitFor(/c clear merged and deleted forks/);
+    d.send('c');
+    await d.waitFor(/Clear 1 finished fork from the history\?/);
+    d.send('y');
+    await d.waitFor(/cleared 1 fork from the history/);
+    expect(listBranches(repoId)).toEqual([]);
+  });
+
+  it('pit delete / rm / discard from the command line', async () => {
+    const run = (...args: string[]) =>
+      execFileSync(process.execPath, [CLI, ...args], {
+        cwd: repo,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+    d = drive(repo);
+    await d.waitFor(/fake claude session/);
+    for (const t of ['one', 'two']) {
+      d.send(`${PREFIX}f`);
+      await d.waitFor(/task/);
+      d.send(`${t}\r`);
+      await d.waitFor(new RegExp(`. ${t}`));
+    }
+    const repoId = repoContext(repo).repoId;
+    // conversation deletion asks first, and refuses without a terminal
+    expect(() => run('rm', 'one', '--conversation')).toThrow(/nothing deleted/);
+    expect(listBranches(repoId).find((b) => b.name === 'one')!.state).not.toBe('discarded');
+    expect(run('rm', 'one', '--yes')).toContain('deleted one');
+    expect(run('discard', 'two')).toContain('deleted two');
+    expect(() => run('delete', '--finished')).toThrow(/nothing removed/);
+    const out = run('delete', '--finished', '--yes');
+    expect(out).toContain('deleted one (and its record)');
+    expect(listBranches(repoId)).toEqual([]);
   });
 });

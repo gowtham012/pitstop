@@ -149,7 +149,21 @@ pitstop then:
 4. tells the main session what changed. The note arrives after main's next tool call, so you don't have to type anything;
 5. removes the fork's worktree, branch and session. Use `pit merge <name> --keep` to keep them.
 
-If you don't want the fork's work, press `ctrl+\` `x` to discard it. The worktree and branch are deleted, and the conversation stays in Claude Code's history.
+### Delete a fork
+
+If you don't want the fork's work, press `ctrl+\` `x` (or run `pit delete <name>`):
+
+- `y` stops the fork and deletes its worktree and branch. Its conversation stays in Claude Code's history, and the fork stays listed as **deleted** in `pit tree --all` and the report.
+- `c` does the same and also deletes the fork's conversation. This can't be undone. Cloud forks are archived from their web page instead, and Codex or Gemini keep their own history.
+
+### Clear the history
+
+Merged and deleted forks stay in `pit tree --all` and `pit report` until you clear them:
+
+- in the split screen, press `ctrl+\` `t`, then `c`;
+- or run `pit delete --finished` (add `--conversation` to delete their conversations too).
+
+Live forks are never touched.
 
 ## 8. Quit and come back later
 
@@ -172,7 +186,8 @@ pit diff fix-the-login-500                        # the fork's changes
 pit log fix-the-login-500                         # its commits and last message
 pit merge fix-the-login-500                       # bring it home
 pit merge fix-the-login-500 --strategy pr         # or push it and open a PR instead
-pit discard update-the-changelog                  # throw one away
+pit delete update-the-changelog                   # throw one away (also: pit rm)
+pit delete --finished                             # clear merged and deleted forks from the history
 pit report                                        # Markdown summary of every fork
 pit report --html --out forks.html                # as a web page
 pit report --out - | gh pr create --body-file -   # straight into a PR description
@@ -242,4 +257,4 @@ npm uninstall -g pitstop-cli
 rm -rf ~/.pitstop          # pitstop's state: branch records, notes, reports
 ```
 
-Your Claude sessions and git branches are untouched. Remove leftover fork worktrees with `pit discard <name>` before uninstalling, or with `git worktree remove` afterwards.
+Your Claude sessions and git branches are untouched. Remove leftover fork worktrees with `pit delete <name>` before uninstalling, or with `git worktree remove` afterwards.

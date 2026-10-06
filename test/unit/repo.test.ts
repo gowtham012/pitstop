@@ -2,7 +2,13 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { listBranches, loadBranch, saveBranch, upsertSession } from '../../src/branches.js';
+import {
+  listBranches,
+  loadBranch,
+  loadSession,
+  saveBranch,
+  upsertSession,
+} from '../../src/branches.js';
 import { trustRepoCommands } from '../../src/core/config.js';
 import { repoContext } from '../../src/core/git.js';
 import { snapshotWorkingTree } from '../../src/core/snapshot.js';
@@ -11,7 +17,7 @@ import { forkSession } from '../../src/fork/fork.js';
 import { createPlainWorktree, safeSetupSource } from '../../src/fork/worktree.js';
 import { handleHook } from '../../src/hook/entry.js';
 import { claimInbox, sendInbox } from '../../src/inbox.js';
-import { discardBranch, mergeBranch, pullFromParent } from '../../src/merge/merge.js';
+import { clearHistory, deleteFork, mergeBranch, pullFromParent } from '../../src/merge/merge.js';
 import { scanRadar } from '../../src/radar.js';
 import { SEAL_TOOL_RESULT } from '../../src/claude/transcript.js';
 import {
@@ -340,13 +346,74 @@ describe('merge', () => {
     expect(pullFromParent(repo, b.name).outcome).toBe('up-to-date');
   });
 
-  it('discards a fork and removes its worktree and branch', async () => {
+  it('deletes a fork: worktree and branch go, the record stays as deleted', async () => {
     seedMain();
     const b = await forkWithWork('throwaway', { 'junk.txt': 'x\n' });
-    discardBranch(repo, b.name);
+    const r = await deleteFork(repo, b.name);
+    expect(r.forgotten).toBe(false);
     expect(fs.existsSync(b.worktree!)).toBe(false);
     expect(loadBranch(b.repoId, b.name)!.state).toBe('discarded');
     expect(sh('git', ['branch', '--list', b.gitBranch], repo)).toBe('');
+    expect(fakeCalls(env.fakeState).some((c) => c.argv[0] === 'rm')).toBe(true);
+  });
+
+  it('forgets a fork: its record and session entry are removed too', async () => {
+    seedMain();
+    const b = await forkWithWork('forget me', { 'junk.txt': 'x\n' });
+    const r = await deleteFork(repo, b.name, { forget: true });
+    expect(r.forgotten).toBe(true);
+    expect(loadBranch(b.repoId, b.name)).toBeUndefined();
+    expect(loadSession(b.sessionId!)).toBeUndefined();
+  });
+
+  it('deleting a fork that is already merged only removes its record', async () => {
+    seedMain();
+    const b = await forkWithWork('merged one', { 'm.txt': 'm\n' });
+    await mergeBranch(repo, b.name);
+    const head = sh('git', ['rev-parse', 'HEAD'], repo);
+    const r = await deleteFork(repo, b.name);
+    expect(r.forgotten).toBe(true);
+    expect(loadBranch(b.repoId, b.name)).toBeUndefined();
+    expect(sh('git', ['rev-parse', 'HEAD'], repo)).toBe(head);
+    expect(read(repo, 'm.txt')).toBe('m\n');
+  });
+
+  it("deletes the fork's conversation and never the parent's", async () => {
+    seedMain();
+    const b = await forkWithWork('secret work', { 's.txt': 's\n' });
+    const proj = path.join(process.env.CLAUDE_CONFIG_DIR!, 'projects', '-repo');
+    fs.mkdirSync(path.join(proj, b.sessionId!, 'subagents'), { recursive: true });
+    fs.writeFileSync(path.join(proj, `${b.sessionId}.jsonl`), '{}\n');
+    fs.writeFileSync(path.join(proj, `${MAIN}.jsonl`), '{}\n');
+    const r = await deleteFork(repo, b.name, { conversation: true });
+    expect(r.removedFiles.sort()).toEqual(
+      [path.join(proj, `${b.sessionId}.jsonl`), path.join(proj, b.sessionId!)].sort(),
+    );
+    expect(fs.existsSync(path.join(proj, `${b.sessionId}.jsonl`))).toBe(false);
+    expect(fs.existsSync(path.join(proj, b.sessionId!))).toBe(false);
+    expect(fs.existsSync(path.join(proj, `${MAIN}.jsonl`))).toBe(true);
+  });
+
+  it('refuses to delete a conversation file outside Claude projects folder', async () => {
+    seedMain();
+    const b = await forkWithWork('odd path', { 'o.txt': 'o\n' });
+    const outside = path.join(env.home, `${b.sessionId}.jsonl`);
+    fs.writeFileSync(outside, '{}\n');
+    upsertSession({ sessionId: b.sessionId!, transcriptPath: outside });
+    await expect(deleteFork(repo, b.name, { conversation: true })).rejects.toThrow(/Refusing/);
+    expect(fs.existsSync(outside)).toBe(true);
+  });
+
+  it('clears merged and deleted forks from the history, keeping live ones', async () => {
+    seedMain();
+    const merged = await forkWithWork('merge it', { 'a.txt': 'a\n' });
+    await mergeBranch(repo, merged.name);
+    const gone = await forkWithWork('drop it', { 'b.txt': 'b\n' });
+    await deleteFork(repo, gone.name);
+    const live = await forkWithWork('keep it', { 'c.txt': 'c\n' });
+    const done = await clearHistory(repo);
+    expect(done.map((r) => r.branch.name).sort()).toEqual([gone.name, merged.name].sort());
+    expect(listBranches(live.repoId).map((b) => b.name)).toEqual([live.name]);
   });
 });
 

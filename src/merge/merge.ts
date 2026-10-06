@@ -1,6 +1,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { branchKind, loadBranch, saveBranch, type BranchRecord } from '../branches.js';
+import {
+  branchKind,
+  listBranches,
+  loadBranch,
+  removeBranchRecord,
+  removeSessionRecord,
+  saveBranch,
+  type BranchRecord,
+} from '../branches.js';
+import { deleteTranscript } from '../claude/locate.js';
 import { sessionCost } from '../status.js';
 import { isBusy, listAgentsAsync, removeSession, stopSession } from '../claude/agents.js';
 import { loadConfig } from '../core/config.js';
@@ -299,15 +308,88 @@ export function cleanupFork(b: BranchRecord, opts: { deleteBranch: boolean }): v
   if (branchKind(b) === 'cloud') git(['push', 'origin', '--delete', b.gitBranch], b.repoTop);
 }
 
-export function discardBranch(cwd: string, name: string, keepBranch = false): BranchRecord {
+export interface DeleteOptions {
+  /** Keep the fork's git branch. */
+  keepBranch?: boolean;
+  /** Also delete the fork's Claude conversation. Cannot be undone. */
+  conversation?: boolean;
+  /** Also remove the fork's record, so it leaves the tree and the report. */
+  forget?: boolean;
+}
+
+export interface DeleteResult {
+  branch: BranchRecord;
+  /** Conversation files removed. */
+  removedFiles: string[];
+  /** Things that were asked for but live elsewhere (cloud, other agents). */
+  notes: string[];
+  /** The record is gone too. */
+  forgotten: boolean;
+}
+
+const FINISHED: BranchRecord['state'][] = ['merged', 'discarded'];
+
+/**
+ * Delete a fork. A live fork is stopped and its worktree, branch and snapshot are
+ * removed; its record stays (as deleted) for the report unless `forget` is set.
+ * A fork that is already merged or deleted just loses its record.
+ */
+export async function deleteFork(
+  cwd: string,
+  name: string,
+  opts: DeleteOptions = {},
+): Promise<DeleteResult> {
   const ctx = repoContext(cwd);
-  const b = loadBranch(ctx.repoId, name);
-  if (!b) throw new MergeError(`No fork named "${name}"`);
-  if (b.worktree && fs.existsSync(b.worktree))
-    commitAll(b.worktree, `pitstop: ${b.task} (discarded)`);
-  const facts = { ...workSummary(b.repoTop, b.snapshotCommit, b.gitBranch), ...sessionFacts(b) };
-  cleanupFork(b, { deleteBranch: !keepBranch });
-  return saveBranch({ ...b, ...facts, state: 'discarded' });
+  return withLock(path.join(repoStateDir(ctx.repoId), 'merge.lock'), async () => {
+    const b = loadBranch(ctx.repoId, name);
+    if (!b) throw new MergeError(`No fork named "${name}"`);
+    return deleteLocked(b, opts);
+  });
+}
+
+function deleteLocked(b: BranchRecord, opts: DeleteOptions): DeleteResult {
+  const finished = FINISHED.includes(b.state);
+  let branch = b;
+  if (!finished) {
+    if (b.worktree && fs.existsSync(b.worktree))
+      commitAll(b.worktree, `pitstop: ${b.task} (discarded)`);
+    const facts = { ...workSummary(b.repoTop, b.snapshotCommit, b.gitBranch), ...sessionFacts(b) };
+    cleanupFork(b, { deleteBranch: !opts.keepBranch });
+    branch = saveBranch({ ...b, ...facts, state: 'discarded' });
+  }
+  const removedFiles: string[] = [];
+  const notes: string[] = [];
+  if (opts.conversation) {
+    const kind = branchKind(b);
+    if (kind === 'cloud')
+      notes.push(
+        `the cloud conversation stays in the cloud${b.cloudUrl ? `; archive it at ${b.cloudUrl}` : ''}`,
+      );
+    else if (kind === 'agent') notes.push(`the conversation is kept by ${b.agent ?? 'the agent'}`);
+    else if (b.sessionId) removedFiles.push(...deleteTranscript(b.sessionId));
+  }
+  const forgotten = finished || !!opts.forget;
+  if (forgotten) {
+    removeBranchRecord(b.repoId, b.name);
+    if (b.sessionId) removeSessionRecord(b.sessionId);
+  }
+  return { branch, removedFiles, notes, forgotten };
+}
+
+/** Forks that `clearHistory` would remove: merged and deleted ones. */
+export function finishedForks(cwd: string): BranchRecord[] {
+  return listBranches(repoContext(cwd).repoId).filter((b) => FINISHED.includes(b.state));
+}
+
+/** Remove every merged and deleted fork from this repo's history. Live and deferred forks stay. */
+export async function clearHistory(
+  cwd: string,
+  opts: { conversation?: boolean } = {},
+): Promise<DeleteResult[]> {
+  const ctx = repoContext(cwd);
+  return withLock(path.join(repoStateDir(ctx.repoId), 'merge.lock'), async () =>
+    finishedForks(cwd).map((b) => deleteLocked(b, { conversation: opts.conversation })),
+  );
 }
 
 export type PullOutcome = 'ok' | 'needs-commit' | 'conflict' | 'no-worktree' | 'up-to-date';

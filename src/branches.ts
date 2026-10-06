@@ -1,5 +1,6 @@
+import fs from 'node:fs';
 import path from 'node:path';
-import { branchesDir, sessionsDir } from './core/paths.js';
+import { branchesDir, inboxDir, sessionsDir } from './core/paths.js';
 import { listJson, readJson, writeJsonAtomic } from './core/store.js';
 
 export type BranchState =
@@ -119,6 +120,11 @@ export function updateBranch(
   return saveBranch({ ...b, ...patch });
 }
 
+/** Forget a fork entirely: it no longer shows in the tree or the report. */
+export function removeBranchRecord(repoId: string, name: string): void {
+  fs.rmSync(branchFile(repoId, name), { force: true });
+}
+
 export function sessionFile(sessionId: string): string {
   return path.join(sessionsDir(), `${sessionId}.json`);
 }
@@ -132,6 +138,12 @@ export function upsertSession(rec: Partial<SessionRecord> & { sessionId: string 
   const next = { role: 'fork', ...prev, ...rec } as SessionRecord;
   writeJsonAtomic(sessionFile(rec.sessionId), next);
   return next;
+}
+
+/** Drop pitstop's index entry and undelivered notes for a session. */
+export function removeSessionRecord(sessionId: string): void {
+  fs.rmSync(sessionFile(sessionId), { force: true });
+  fs.rmSync(inboxDir(sessionId), { recursive: true, force: true });
 }
 
 export function branchForSession(sessionId: string): BranchRecord | undefined {

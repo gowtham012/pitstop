@@ -128,21 +128,21 @@ Requirements:
 
 Inside `pit`, press `ctrl+\`, then one key:
 
-| Key               | What it does                                                                            |
-| ----------------- | --------------------------------------------------------------------------------------- |
-| `f`               | Fork the focused session into a new pane. Tab cycles presets, or type `hotfix: <task>`. |
-| `b`               | Fork into the background (no pane). The status bar shows when it's done.                |
-| `←` `→` / `1`–`9` | Move focus or jump to a session. Clicking a pane focuses it too.                        |
-| `z`               | Zoom the focused pane to full screen and back.                                          |
-| `m`               | Merge a fork back.                                                                      |
-| `d`               | Open the fork's diff in a pane.                                                         |
-| `p`               | Pull main's latest commits into the fork.                                               |
-| `t`               | Branch tree with state, files touched, cost and overlaps.                               |
-| `x`               | Discard a fork (worktree and branch removed, conversation kept).                        |
-| `e`               | Write a shareable report.                                                               |
-| `s`               | Send a message to a cloud fork.                                                         |
-| `r`               | Re-attach a pane, or resume an agent.                                                   |
-| `q`               | Quit. **Claude sessions keep running.** Run `pit` again to get the same panes back.     |
+| Key               | What it does                                                                                |
+| ----------------- | ------------------------------------------------------------------------------------------- |
+| `f`               | Fork the focused session into a new pane. Tab cycles presets, or type `hotfix: <task>`.     |
+| `b`               | Fork into the background (no pane). The status bar shows when it's done.                    |
+| `←` `→` / `1`–`9` | Move focus or jump to a session. Clicking a pane focuses it too.                            |
+| `z`               | Zoom the focused pane to full screen and back.                                              |
+| `m`               | Merge a fork back.                                                                          |
+| `d`               | Open the fork's diff in a pane.                                                             |
+| `p`               | Pull main's latest commits into the fork.                                                   |
+| `t`               | Branch tree with state, files touched, cost and overlaps. `c` clears finished forks.        |
+| `x`               | Delete a fork: stops it, removes its worktree and branch. `c` deletes its conversation too. |
+| `e`               | Write a shareable report.                                                                   |
+| `s`               | Send a message to a cloud fork.                                                             |
+| `r`               | Re-attach a pane, or resume an agent.                                                       |
+| `q`               | Quit. **Claude sessions keep running.** Run `pit` again to get the same panes back.         |
 
 Pressing `ctrl+\` twice sends it to the pane. Claude Code doesn't bind it, and you can change it with `prefixKey`.
 
@@ -158,7 +158,8 @@ pit log fix-the-login-500
 pit diff fix-the-login-500
 pit merge fix-the-login-500                     # --strategy commit|apply|defer|pr, --keep, --skip-tests
 pit pull fix-the-login-500
-pit discard fix-the-login-500
+pit delete fix-the-login-500                    # or: pit rm; --conversation deletes its chat too
+pit delete --finished                           # clear merged and deleted forks from the history
 pit report --out - | gh pr create --body-file -
 ```
 
@@ -205,7 +206,7 @@ The presets `cloud`, `codex` and `gemini` are built in. Pick one with Tab in the
 
 ## Report
 
-`pit report`, or `ctrl+\` `e`, writes a summary of every fork, including merged and discarded ones. For each fork it shows:
+`pit report`, or `ctrl+\` `e`, writes a summary of every fork, including merged and deleted ones. For each fork it shows:
 
 - the task and where it ran;
 - the result and why;

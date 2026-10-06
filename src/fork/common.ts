@@ -89,7 +89,7 @@ export async function prepareFork(req: ForkRequest): Promise<PreparedFork> {
   const live = branches.filter((b) => LIVE_STATES.includes(b.state) && b.state !== 'deferred');
   if (live.length + 1 >= cfg.maxSessions) {
     throw new ForkError(
-      `Already running ${live.length + 1} sessions (limit ${cfg.maxSessions}). Merge or discard a fork, or raise maxSessions in .pitstop.json.`,
+      `Already running ${live.length + 1} sessions (limit ${cfg.maxSessions}). Merge or delete a fork, or raise maxSessions in .pitstop.json.`,
     );
   }
   const preset = req.preset ? cfg.presets[req.preset] : undefined;

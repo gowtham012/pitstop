@@ -6,6 +6,7 @@ All notable changes to this project are listed here. The format follows [Keep a 
 
 ### Added
 
+- **Delete:** `pit delete <name>` (also `pit rm`; `pit discard` still works) and `ctrl+\` `x`. `--conversation`, or `c` in the popup, also deletes the fork's Claude conversation. `pit delete --finished`, or `c` in the branch tree, clears merged and deleted forks from the history. Forks that were discarded are now shown as "deleted".
 - A [getting started guide](docs/guide.md): install, first fork and merge, presets, repo setup, troubleshooting, update and uninstall.
 
 ### Fixed

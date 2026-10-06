@@ -4,7 +4,7 @@ A map of the code for contributors. The README covers what pitstop does; this pa
 
 ```
 src/
-  cli.ts                `pit` with no command opens the UI; subcommands: fork, merge, diff, pull, tree, log, report, discard, trust, doctor
+  cli.ts                `pit` with no command opens the UI; subcommands: fork, merge, diff, pull, tree, log, report, delete, trust, doctor
   version.ts
   branches.ts           BranchRecord / SessionRecord: one JSON file per fork and per session under ~/.pitstop
   inbox.ts              notes to a session; claimed once by atomic rename, sanitized before delivery
@@ -34,7 +34,7 @@ src/
     main.ts             start or reuse the main session
   merge/
     plan.ts             pure decision table: commit / apply / defer / pr / nothing
-    merge.ts            merge, discard, pull; saves what the report needs
+    merge.ts            merge, delete, clear history, pull; saves what the report needs
     gate.ts             test gate
   hook/
     entry.ts            the hook Claude Code runs (bundled to dist/hook.js); must be fast and never fail a session

@@ -5,7 +5,7 @@ export type Command =
   | 'diff'
   | 'pull'
   | 'tree'
-  | 'discard'
+  | 'delete'
   | 'zoom'
   | 'reattach'
   | 'help'
@@ -35,7 +35,7 @@ const KEYS: Record<string, Command> = {
   d: 'diff',
   p: 'pull',
   t: 'tree',
-  x: 'discard',
+  x: 'delete',
   z: 'zoom',
   r: 'reattach',
   e: 'report',

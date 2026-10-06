@@ -10,12 +10,19 @@ import {
 import type { Overlap } from './radar.js';
 
 export type SessionState =
-  'working' | 'needs input' | 'idle' | 'stopped' | 'ready' | BranchRecord['state'];
+  | 'working'
+  | 'needs input'
+  | 'idle'
+  | 'stopped'
+  | 'ready'
+  | 'deleted'
+  | Exclude<BranchRecord['state'], 'discarded'>;
 
 /** One word for where a session is, combining Claude Code's live status with pitstop's branch state. */
 export function sessionState(agent: AgentInfo | undefined, branch?: BranchRecord): SessionState {
+  if (branch?.state === 'discarded') return 'deleted';
   if (branch && !['starting', 'running', 'idle', 'done'].includes(branch.state))
-    return branch.state;
+    return branch.state as SessionState;
   if (branch?.kind === 'cloud') return branch.state === 'done' ? 'ready' : 'working';
   if (branch?.kind === 'agent') {
     return branch.state === 'idle' ? 'stopped' : branch.state === 'done' ? 'idle' : 'running';
@@ -43,7 +50,7 @@ export function stateGlyph(s: SessionState): string {
       return '✗';
     case 'deferred':
       return '↺';
-    case 'discarded':
+    case 'deleted':
     case 'stopped':
       return '○';
     default:
@@ -76,7 +83,7 @@ export interface TreeInput {
   costs?: Map<string, CostInfo>;
   touched?: Map<string, string[]>;
   overlaps?: Overlap[];
-  /** Include merged and discarded forks. */
+  /** Include merged and deleted forks. */
   all?: boolean;
 }
 

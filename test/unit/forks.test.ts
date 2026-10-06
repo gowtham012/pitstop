@@ -12,7 +12,7 @@ import {
 } from '../../src/fork/common.js';
 import { cloudForkReady, parseCloudSession, remoteHead } from '../../src/fork/cloud.js';
 import { forkSession } from '../../src/fork/fork.js';
-import { discardBranch, mergeBranch } from '../../src/merge/merge.js';
+import { deleteFork, mergeBranch } from '../../src/merge/merge.js';
 import { claimInbox } from '../../src/inbox.js';
 import { isolate, makeRepo, read, setFakeAgents, sh, tmpDir, write } from '../helpers.js';
 
@@ -208,7 +208,7 @@ describe('agent forks', () => {
     ).rejects.toThrow(/Only Claude sessions/);
   });
 
-  it('saves the work of a discarded fork for the report', async () => {
+  it('saves the work of a deleted fork for the report, and leaves agent conversations alone', async () => {
     seedMain();
     const b = await forkSession({
       cwd: repo,
@@ -219,9 +219,11 @@ describe('agent forks', () => {
       confirmed: true,
     });
     write(b.worktree!, 'junk.txt', 'x\n');
-    const d = discardBranch(repo, b.name);
-    expect(d.state).toBe('discarded');
-    expect(d.filesChanged).toEqual(['junk.txt']);
+    const d = await deleteFork(repo, b.name, { conversation: true });
+    expect(d.branch.state).toBe('discarded');
+    expect(d.branch.filesChanged).toEqual(['junk.txt']);
+    expect(d.removedFiles).toEqual([]);
+    expect(d.notes.join()).toMatch(/kept by codex/);
   });
 });
 

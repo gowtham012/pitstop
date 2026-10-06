@@ -19,7 +19,13 @@ import { recordAgentConsent } from '../fork/common.js';
 import { ConfirmationNeeded, forkSession } from '../fork/fork.js';
 import { adoptMainSession, ensureMainSession, type MainSession } from '../fork/main.js';
 import { sendInbox } from '../inbox.js';
-import { discardBranch, mergeBranch, pullFromParent } from '../merge/merge.js';
+import {
+  clearHistory,
+  deleteFork,
+  finishedForks,
+  mergeBranch,
+  pullFromParent,
+} from '../merge/merge.js';
 import { collectTouched, findOverlaps, overlapKey, type Overlap } from '../radar.js';
 import { buildReport, writeReport } from '../report.js';
 import { sessionCost, sessionState, stateGlyph, treeLines, type CostInfo } from '../status.js';
@@ -40,14 +46,21 @@ export interface AppOptions {
 }
 
 type Overlay =
-  | { kind: 'text'; title: string; lines: string[] }
-  | { kind: 'confirm'; title: string; lines: string[]; onYes: () => void }
+  | { kind: 'text'; title: string; lines: string[]; keys?: OverlayKey[] }
+  | { kind: 'confirm'; title: string; lines: string[]; onYes: () => void; alt?: OverlayKey }
   | {
       kind: 'pick';
       title: string;
       items: { label: string; value: string }[];
       onPick: (value: string) => void;
     };
+
+/** An extra one-letter choice in an overlay, e.g. `c` for "delete its conversation too". */
+interface OverlayKey {
+  key: string;
+  label: string;
+  run: () => void;
+}
 
 interface Prompt {
   label: string;
@@ -72,7 +85,7 @@ const HELP = [
   '  m   merge a fork back (safe: commit, apply or defer)',
   "  d   show a fork's diff in a pane",
   "  p   pull main's latest commits into a fork",
-  '  t   branch tree        x   discard a fork',
+  '  t   branch tree        x   delete a fork',
   '  e   write a shareable report of every fork',
   '  s   send a message to a cloud fork',
   '  r   re-attach a pane   q   quit (sessions keep running)',
@@ -95,6 +108,8 @@ export class App {
   private focus = '';
   private zoom: string | undefined;
   private overlay: Overlay | undefined;
+  /** The main session's pane, fixed at startup. */
+  private mainPaneId = '';
   private prompt: Prompt | undefined;
   private agents = new Map<string, AgentInfo>();
   private branches: BranchRecord[] = [];
@@ -155,6 +170,7 @@ export class App {
       pid: process.pid,
       startedAt: new Date().toISOString(),
     });
+    this.mainPaneId = this.main.sessionId;
     this.addSessionPane(this.main.sessionId, this.main.shortId);
     this.restoreLayout();
     this.reconcilePanes();
@@ -324,6 +340,14 @@ export class App {
       }
       const id = this.paneIdOf(b);
       if (this.panes.has(id) && (b.state === 'merged' || b.state === 'discarded')) {
+        this.closePane(id);
+        changed = true;
+      }
+    }
+    // A fork whose record was removed (deleted and forgotten) takes its pane with it.
+    for (const [id, pane] of this.panes) {
+      if (pane.kind === 'command' || id === this.mainPaneId) continue;
+      if (!this.branchByPane(id)) {
         this.closePane(id);
         changed = true;
       }
@@ -540,6 +564,9 @@ export class App {
       if (/^[yY]/.test(data)) {
         this.overlay = undefined;
         o.onYes();
+      } else if (o.alt && data === o.alt.key) {
+        this.overlay = undefined;
+        o.alt.run();
       } else if (/^[nN\x1b\x03q]/.test(data)) this.overlay = undefined;
     } else if (o.kind === 'pick') {
       const n = Number(data[0]);
@@ -549,6 +576,7 @@ export class App {
       } else if (/^[\x1b\x03q]/.test(data)) this.overlay = undefined;
     } else {
       this.overlay = undefined;
+      o.keys?.find((k) => k.key === data)?.run();
     }
     this.scheduleRender();
   }
@@ -586,8 +614,8 @@ export class App {
         return this.withFork('Diff which fork?', (b) => this.showDiff(b));
       case 'pull':
         return this.withFork('Pull main into which fork?', (b) => this.pull(b));
-      case 'discard':
-        return this.withFork('Discard which fork?', (b) => this.confirmDiscard(b));
+      case 'delete':
+        return this.withFork('Delete which fork?', (b) => this.confirmDelete(b));
       case 'tree':
         return this.showTree();
       case 'reattach': {
@@ -816,21 +844,28 @@ export class App {
     };
   }
 
-  private confirmDiscard(b: BranchRecord): void {
+  private confirmDelete(b: BranchRecord): void {
+    const run = (conversation: boolean) =>
+      void this.op(`deleting ${b.name}…`, async () => {
+        const r = await deleteFork(this.ctx.top, b.name, { conversation });
+        await this.refresh();
+        this.reconcilePanes();
+        const extra = conversation
+          ? r.notes.length
+            ? ` · ${r.notes.join('; ')}`
+            : ' and its conversation'
+          : '';
+        this.flash(`deleted ${b.name}${extra}`, STYLE.ok, 8000);
+      });
     this.overlay = {
       kind: 'confirm',
-      title: `Discard ${b.name}?`,
+      title: `Delete ${b.name}?`,
       lines: [
-        'Stops the fork, deletes its worktree and its branch.',
-        'Its conversation is kept by Claude Code.',
+        'Stops the fork and deletes its worktree and its branch.',
+        'Its conversation stays in Claude Code unless you press c.',
       ],
-      onYes: () =>
-        void this.op(`discarding ${b.name}…`, async () => {
-          discardBranch(this.ctx.top, b.name);
-          await this.refresh();
-          this.reconcilePanes();
-          this.flash(`discarded ${b.name}`, STYLE.ok);
-        }),
+      onYes: () => run(false),
+      alt: { key: 'c', label: 'delete + conversation (no undo)', run: () => run(true) },
     };
   }
 
@@ -876,9 +911,43 @@ export class App {
           overlaps: this.overlaps,
           all: true,
         }),
+        keys: finishedForks(this.ctx.top).length
+          ? [{ key: 'c', label: 'clear merged and deleted forks', run: () => this.confirmClear() }]
+          : [],
       };
       this.scheduleRender();
     })();
+  }
+
+  private confirmClear(): void {
+    const forks = finishedForks(this.ctx.top);
+    if (!forks.length) return;
+    this.overlay = {
+      kind: 'confirm',
+      title: `Clear ${forks.length} finished fork${forks.length === 1 ? '' : 's'} from the history?`,
+      lines: [
+        ...forks
+          .slice(0, 8)
+          .map((b) => `${b.name}  (${b.state === 'merged' ? 'merged' : 'deleted'})`),
+        ...(forks.length > 8 ? [`… and ${forks.length - 8} more`] : []),
+        '',
+        'They leave the tree and the report. Their conversations stay unless you press c.',
+      ],
+      onYes: () => this.clear(false),
+      alt: { key: 'c', label: 'clear + conversations (no undo)', run: () => this.clear(true) },
+    };
+  }
+
+  private clear(conversation: boolean): void {
+    void this.op('clearing history…', async () => {
+      const done = await clearHistory(this.ctx.top, { conversation });
+      await this.refresh();
+      this.reconcilePanes();
+      this.flash(
+        `cleared ${done.length} fork${done.length === 1 ? '' : 's'} from the history`,
+        STYLE.ok,
+      );
+    });
   }
 
   /** Run a slow action with a status-bar spinner; errors become a message instead of a crash. */
@@ -1092,15 +1161,23 @@ export class App {
   private drawOverlay(screen: Screen): void {
     const o = this.overlay!;
     const body = o.kind === 'pick' ? o.items.map((it, i) => `${i + 1}  ${it.label}`) : o.lines;
+    const extra = (k: OverlayKey) => `${k.key} ${k.label}`;
     const footer =
       o.kind === 'confirm'
-        ? 'y yes · n no'
+        ? ['y yes', ...(o.alt ? [extra(o.alt)] : []), 'n no'].join(' · ')
         : o.kind === 'pick'
           ? '1-9 pick · esc cancel'
-          : 'any key to close';
+          : o.keys?.length
+            ? [...o.keys.map(extra), 'any other key closes'].join(' · ')
+            : 'any key to close';
     const width = Math.min(
       this.cols - 4,
-      Math.max(textWidth(o.title) + 4, ...body.map((l) => textWidth(l) + 4), 44),
+      Math.max(
+        textWidth(o.title) + 4,
+        textWidth(footer) + 4,
+        ...body.map((l) => textWidth(l) + 4),
+        44,
+      ),
     );
     const height = Math.min(this.rows - 3, body.length + 4);
     const x0 = Math.floor((this.cols - width) / 2);

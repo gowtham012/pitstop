@@ -94,7 +94,7 @@ describe('report', () => {
       ]),
     );
     expect(md).toContain('# pitstop report: app');
-    expect(md).toContain('3 forks: 1 merged, 1 live, 1 discarded');
+    expect(md).toContain('3 forks: 1 merged, 1 live, 1 deleted');
     expect(md).toContain('### fix-login');
     expect(md).toContain('| Task | fix the login \\| crash |'); // pipes escaped inside tables
     expect(md).toContain("merged: commit, the parent's working tree is clean");
