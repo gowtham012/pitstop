@@ -1,21 +1,32 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { listBranches, LIVE_STATES, updateBranch, type BranchRecord } from '../branches.js';
+import {
+  branchKind,
+  listBranches,
+  loadBranch,
+  LIVE_STATES,
+  updateBranch,
+  type BranchRecord,
+} from '../branches.js';
 import { claudeBin, listAgentsAsync, stopSession, type AgentInfo } from '../claude/agents.js';
 import { loadConfig, parseTaskInput, prefixByte, type PitConfig } from '../core/config.js';
 import { runSync } from '../core/exec.js';
 import { repoContext, type RepoContext } from '../core/git.js';
 import { repoStateDir } from '../core/paths.js';
 import { readJson, writeJsonAtomic } from '../core/store.js';
-import { forkSession } from '../fork/fork.js';
+import { cloudForkReady, messageCloudFork, parseCloudSession, remoteHead } from '../fork/cloud.js';
+import { recordAgentConsent } from '../fork/common.js';
+import { ConfirmationNeeded, forkSession } from '../fork/fork.js';
 import { adoptMainSession, ensureMainSession, type MainSession } from '../fork/main.js';
 import { sendInbox } from '../inbox.js';
 import { discardBranch, mergeBranch, pullFromParent } from '../merge/merge.js';
 import { collectTouched, findOverlaps, overlapKey, type Overlap } from '../radar.js';
+import { buildReport, writeReport } from '../report.js';
 import { sessionCost, sessionState, stateGlyph, treeLines, type CostInfo } from '../status.js';
 import { InputRouter, LineEditor, type Command } from './input.js';
 import { computeLayout, type Layout } from './layout.js';
 import { Pane } from './pane.js';
+import { tuiPidFile } from './presence.js';
 import { diffScreens, Screen, STYLE, textWidth, truncate } from './screen.js';
 
 export interface AppOptions {
@@ -42,6 +53,7 @@ interface Prompt {
   label: string;
   editor: LineEditor;
   onSubmit: (value: string) => void;
+  onTab?: () => void;
 }
 
 interface SavedLayout {
@@ -61,8 +73,11 @@ const HELP = [
   "  d   show a fork's diff in a pane",
   "  p   pull main's latest commits into a fork",
   '  t   branch tree        x   discard a fork',
+  '  e   write a shareable report of every fork',
+  '  s   send a message to a cloud fork',
   '  r   re-attach a pane   q   quit (sessions keep running)',
   '',
+  'In the fork prompt, Tab cycles presets: hotfix, explore, cloud, codex, gemini, …',
   'ctrl+\\ twice sends ctrl+\\ to the pane. Click a pane to focus it.',
 ];
 
@@ -92,6 +107,7 @@ export class App {
   private lastLayout: Layout | undefined;
   private renderTimer: NodeJS.Timeout | undefined;
   private timers: NodeJS.Timeout[] = [];
+  private lastCloudCheck = 0;
   private stopped = false;
   private exitResolve: (() => void) | undefined;
 
@@ -134,6 +150,11 @@ export class App {
     process.on('SIGTERM', this.onSignal);
     process.on('SIGHUP', this.onSignal);
 
+    // Lets `pit fork` in another terminal know a UI is open to start cloud and agent panes.
+    writeJsonAtomic(tuiPidFile(this.ctx.repoId), {
+      pid: process.pid,
+      startedAt: new Date().toISOString(),
+    });
     this.addSessionPane(this.main.sessionId, this.main.shortId);
     this.restoreLayout();
     this.reconcilePanes();
@@ -160,12 +181,58 @@ export class App {
 
   private label(id: string): string {
     if (id === this.main?.sessionId) return 'main';
-    const b = this.branchBySession(id);
+    const b = this.branchByPane(id);
     return b?.name ?? this.panes.get(id)?.title ?? id.slice(0, 8);
   }
 
-  private branchBySession(id: string): BranchRecord | undefined {
-    return this.branches.find((b) => b.sessionId === id);
+  /** Pane id for a fork: its Claude session id, or fork:<name> for cloud and agent forks. */
+  private paneIdOf(b: BranchRecord): string {
+    return b.sessionId ?? `fork:${b.name}`;
+  }
+
+  private branchByPane(id: string): BranchRecord | undefined {
+    return this.branches.find((b) => b.sessionId === id || `fork:${b.name}` === id);
+  }
+
+  /** A pane running a cloud or agent fork's own program (not `claude attach`). */
+  private addLaunchPane(b: BranchRecord, resume = false): void {
+    const id = this.paneIdOf(b);
+    if (this.panes.has(id) || !b.launch) return;
+    const kind = branchKind(b) === 'cloud' ? 'cloud' : 'agent';
+    const args = resume && b.resumeArgs ? b.resumeArgs : b.launch.args;
+    const size = this.paneSizeGuess();
+    const pane: Pane = new Pane({
+      id,
+      kind,
+      title: b.name,
+      cmd: b.launch.cmd,
+      args,
+      cwd: b.launch.cwd,
+      env: b.launch.env,
+      cols: size.cols,
+      rows: size.rows,
+      onUpdate: () => {
+        if (kind === 'cloud' && !this.branchByPane(id)?.cloudSessionId) {
+          const found = parseCloudSession(pane.lines().join('\n'));
+          if (found) {
+            updateBranch(b.repoId, b.name, { cloudSessionId: found.id, cloudUrl: found.url });
+            this.flash(`cloud fork ${b.name}: ${found.url}`, STYLE.ok, 10000);
+          }
+        }
+        this.scheduleRender();
+      },
+      onExit: () => {
+        const cur = this.branchByPane(id);
+        if (kind === 'agent' && cur && LIVE_STATES.includes(cur.state)) {
+          updateBranch(b.repoId, b.name, { state: 'idle', note: `${b.agent ?? 'agent'} exited` });
+        }
+      },
+    });
+    if (kind === 'agent' && b.resumeArgs) pane.setCommand(b.launch.cmd, b.resumeArgs);
+    this.panes.set(id, pane);
+    if (!this.order.includes(id)) this.order.push(id);
+    if (b.state === 'starting' || b.state === 'idle')
+      updateBranch(b.repoId, b.name, { state: 'running' });
   }
 
   private addSessionPane(sessionId: string, shortId?: string): void {
@@ -244,17 +311,25 @@ export class App {
         this.addSessionPane(b.sessionId, b.shortId);
         changed = true;
       }
-      if (
-        b.sessionId &&
-        this.panes.has(b.sessionId) &&
-        (b.state === 'merged' || b.state === 'discarded')
-      ) {
-        this.closePane(b.sessionId);
+      const kind = branchKind(b);
+      if (b.launch && live && !this.panes.has(this.paneIdOf(b))) {
+        // Agents come back after a restart (resumed); a cloud pane is only needed to start the session.
+        if (kind === 'agent') {
+          this.addLaunchPane(b, b.state !== 'starting');
+          changed = true;
+        } else if (kind === 'cloud' && b.state === 'starting') {
+          this.addLaunchPane(b);
+          changed = true;
+        }
+      }
+      const id = this.paneIdOf(b);
+      if (this.panes.has(id) && (b.state === 'merged' || b.state === 'discarded')) {
+        this.closePane(id);
         changed = true;
       }
     }
     for (const [id, pane] of this.panes) {
-      if (pane.kind === 'session') pane.title = this.label(id);
+      if (pane.kind !== 'command') pane.title = this.label(id);
     }
     if (changed) this.layoutAndRender();
     else this.scheduleRender();
@@ -262,7 +337,7 @@ export class App {
 
   private saveLayout(): void {
     writeJsonAtomic(path.join(repoStateDir(this.ctx.repoId), 'layout.json'), {
-      order: this.order.filter((id) => this.panes.get(id)?.kind === 'session'),
+      order: this.order.filter((id) => this.panes.get(id)?.kind !== 'command'),
       focus: this.focus,
       zoom: this.zoom,
     } satisfies SavedLayout);
@@ -273,9 +348,10 @@ export class App {
     if (!saved) return;
     for (const id of saved.order) {
       if (id === this.main.sessionId) continue;
-      const b = this.branchBySession(id);
-      if (b && this.agents.has(id) && LIVE_STATES.includes(b.state))
-        this.addSessionPane(id, b.shortId);
+      const b = this.branchByPane(id);
+      if (!b || !LIVE_STATES.includes(b.state)) continue;
+      if (b.sessionId && this.agents.has(id)) this.addSessionPane(id, b.shortId);
+      else if (branchKind(b) === 'agent') this.addLaunchPane(b, true);
     }
     if (saved.focus && this.panes.has(saved.focus)) this.focus = saved.focus;
     if (saved.zoom && this.panes.has(saved.zoom)) this.zoom = saved.zoom;
@@ -287,6 +363,10 @@ export class App {
     const agents = await listAgentsAsync();
     this.agents = new Map(agents.map((a) => [a.sessionId, a]));
     this.branches = listBranches(this.ctx.repoId);
+    if (Date.now() - this.lastCloudCheck > 30_000) {
+      this.lastCloudCheck = Date.now();
+      void this.checkCloudForks();
+    }
     for (const b of this.branches) {
       if (!b.sessionId || !LIVE_STATES.includes(b.state)) continue;
       const agent = this.agents.get(b.sessionId);
@@ -310,6 +390,23 @@ export class App {
         updateBranch(b.repoId, b.name, { state: 'done' });
         this.flash(`background fork ${b.name} finished · ctrl+\\ m to merge`, STYLE.ok, 10000);
       }
+    }
+  }
+
+  /** A cloud fork is ready once its session pushes past the starting point. */
+  private async checkCloudForks(): Promise<void> {
+    for (const b of this.branches) {
+      if (branchKind(b) !== 'cloud' || !['starting', 'running'].includes(b.state)) continue;
+      const head = await remoteHead(b);
+      if (!head || head === b.remoteHead) continue;
+      const next = { ...b, remoteHead: head };
+      const ready = cloudForkReady(next);
+      updateBranch(b.repoId, b.name, {
+        remoteHead: head,
+        ...(ready ? { state: 'done' as const } : {}),
+      });
+      if (ready)
+        this.flash(`cloud fork ${b.name} pushed its work · ctrl+\\ m to merge`, STYLE.ok, 12000);
     }
   }
 
@@ -357,12 +454,17 @@ export class App {
     const data = buf.toString('utf8');
     if (this.overlay) return this.overlayKey(data);
     if (this.prompt) {
-      const r = this.prompt.editor.feed(data);
-      const p = this.prompt;
-      if (r === 'submit') {
-        this.prompt = undefined;
-        if (p.editor.value.trim()) p.onSubmit(p.editor.value.trim());
-      } else if (r === 'cancel') this.prompt = undefined;
+      // Feed Tab-separated pieces one at a time so quick repeated Tabs each count.
+      for (const [i, piece] of data.split('\t').entries()) {
+        const p = this.prompt;
+        if (!p) break;
+        if (i > 0) p.onTab?.();
+        const r = piece ? p.editor.feed(piece) : undefined;
+        if (r === 'submit') {
+          this.prompt = undefined;
+          if (p.editor.value.trim()) p.onSubmit(p.editor.value.trim());
+        } else if (r === 'cancel') this.prompt = undefined;
+      }
       return this.scheduleRender();
     }
     for (const action of this.router.feed(data)) {
@@ -484,33 +586,74 @@ export class App {
         return this.showTree();
       case 'reattach': {
         const pane = this.panes.get(this.focus);
-        if (pane?.kind === 'session') pane.respawn();
-        return this.flash('re-attached', STYLE.ok);
+        if (pane?.kind === 'cloud') {
+          const b = this.branchByPane(this.focus);
+          return this.flash(
+            b?.cloudUrl
+              ? `open the cloud session: ${b.cloudUrl}`
+              : 'the cloud session has no link yet',
+            STYLE.warn,
+            10000,
+          );
+        }
+        if (pane?.kind === 'session' || pane?.kind === 'agent') pane.respawn();
+        return this.flash(pane?.kind === 'agent' ? 'resumed the agent' : 're-attached', STYLE.ok);
       }
+      case 'report':
+        return void this.op('writing report…', async () => {
+          const file = writeReport(
+            await buildReport(this.ctx.top, {
+              mainLabel: this.main.name,
+              mainSessionId: this.main.sessionId,
+            }),
+          );
+          this.flash(`report written: ${file}`, STYLE.ok, 15000);
+        });
+      case 'send':
+        return this.withFork(
+          'Message which cloud fork?',
+          (b) => this.askCloudMessage(b),
+          (b) => branchKind(b) === 'cloud',
+        );
       case 'help':
         this.overlay = { kind: 'text', title: 'pitstop keys', lines: HELP };
         return;
-      case 'quit':
+      case 'quit': {
+        const agentPanes = [...this.panes.values()].filter((p) => p.kind === 'agent' && !p.exited);
         this.overlay = {
           kind: 'confirm',
           title: 'Quit pit?',
           lines: [
-            'Every session keeps running in the background.',
+            'Every Claude session keeps running in the background.',
             'Run `pit` here again to reopen the same panes.',
+            ...(agentPanes.length
+              ? [
+                  '',
+                  `These agent panes stop: ${agentPanes.map((p) => p.title).join(', ')}.`,
+                  'Their worktrees and branches are kept; pit resumes them next time.',
+                ]
+              : []),
           ],
           onYes: () => void this.stop(),
         };
         return;
+      }
     }
   }
 
   /** Run `fn` on the focused fork, or let the user pick one when main (or nothing) is focused. */
-  private withFork(title: string, fn: (b: BranchRecord) => void): void {
-    const focused = this.branchBySession(this.focus);
-    if (focused && LIVE_STATES.includes(focused.state)) return fn(focused);
-    const live = this.branches.filter((b) => LIVE_STATES.includes(b.state));
-    if (!live.length) return this.flash('No forks yet. Press ctrl+\\ f to fork.', STYLE.warn);
-    if (live.length === 1) return fn(live[0]!);
+  private withFork(
+    title: string,
+    fn: (b: BranchRecord) => void,
+    only: (b: BranchRecord) => boolean = () => true,
+  ): void {
+    // Act on the record as it is on disk now; hooks may have changed it since the last refresh.
+    const fresh = (b: BranchRecord) => loadBranch(b.repoId, b.name) ?? b;
+    const focused = this.branchByPane(this.focus);
+    if (focused && LIVE_STATES.includes(focused.state) && only(focused)) return fn(fresh(focused));
+    const live = this.branches.filter((b) => LIVE_STATES.includes(b.state) && only(b));
+    if (!live.length) return this.flash('No matching forks. Press ctrl+\\ f to fork.', STYLE.warn);
+    if (live.length === 1) return fn(fresh(live[0]!));
     this.overlay = {
       kind: 'pick',
       title,
@@ -520,42 +663,108 @@ export class App {
       })),
       onPick: (name) => {
         const b = this.branches.find((x) => x.name === name);
-        if (b) fn(b);
+        if (b) fn(fresh(b));
       },
     };
   }
 
   private askFork(mode: 'pane' | 'bg'): void {
-    const parentId =
-      this.panes.get(this.focus)?.kind === 'session' ? this.focus : this.main.sessionId;
-    const presets = Object.keys(this.cfg.presets).join(', ');
-    this.prompt = {
-      label: `${mode === 'bg' ? 'background fork' : 'fork'} of ${this.label(parentId)} · task (${presets}: …)`,
+    const focusedPane = this.panes.get(this.focus);
+    if (focusedPane && (focusedPane.kind === 'agent' || focusedPane.kind === 'cloud')) {
+      return this.flash(
+        'Only Claude sessions can be forked. Focus main or a Claude fork first.',
+        STYLE.warn,
+      );
+    }
+    const parentId = focusedPane?.kind === 'session' ? this.focus : this.main.sessionId;
+    const choices = [undefined, ...Object.keys(this.cfg.presets)];
+    let index = 0;
+    const label = () => {
+      const chosen = choices[index];
+      const what = mode === 'bg' ? 'background fork' : 'fork';
+      return `${what} of ${this.label(parentId)} · ${chosen ? `preset: ${chosen}` : 'no preset'} (Tab) · task`;
+    };
+    const prompt: Prompt = {
+      label: label(),
       editor: new LineEditor(),
+      onTab: () => {
+        index = (index + 1) % choices.length;
+        prompt.label = label();
+      },
       onSubmit: (value) => {
-        const { task, preset } = parseTaskInput(value, this.cfg.presets);
-        void this.op(`forking ${this.label(parentId)}…`, async () => {
-          const b = await forkSession({
-            cwd: this.ctx.top,
-            parentSessionId: parentId,
-            task,
-            preset,
-            mode,
-          });
-          await this.refresh();
-          if (mode === 'pane' && b.sessionId) {
-            this.addSessionPane(b.sessionId, b.shortId);
-            this.focus = b.sessionId;
-            this.zoom = undefined;
-          }
-          const how =
-            b.forkMethod === 'sealed'
+        const typed = parseTaskInput(value, this.cfg.presets);
+        this.startFork(parentId, typed.task, typed.preset ?? choices[index], mode);
+      },
+    };
+    this.prompt = prompt;
+  }
+
+  /** Fork, asking first when the fork would push to GitHub or send a summary to another provider. */
+  private startFork(
+    parentId: string,
+    task: string,
+    preset: string | undefined,
+    mode: 'pane' | 'bg',
+    confirmed = false,
+  ): void {
+    void this.op(`forking ${this.label(parentId)}…`, async () => {
+      let b: BranchRecord;
+      try {
+        b = await forkSession({
+          cwd: this.ctx.top,
+          parentSessionId: parentId,
+          task,
+          preset,
+          mode,
+          confirmed,
+        });
+      } catch (err) {
+        if (!(err instanceof ConfirmationNeeded)) throw err;
+        const agent = preset ? this.cfg.presets[preset]?.agent : undefined;
+        this.overlay = {
+          kind: 'confirm',
+          title:
+            err.what === 'cloud' ? 'Start a cloud fork?' : `Fork into ${agent ?? 'another agent'}?`,
+          lines: [err.message, '', `Task: ${task}`],
+          onYes: () => {
+            if (err.what === 'agent' && agent) recordAgentConsent(this.ctx.repoId, agent);
+            this.startFork(parentId, task, preset, mode, true);
+          },
+        };
+        return;
+      }
+      await this.refresh();
+      const kind = branchKind(b);
+      if (kind === 'claude' && mode === 'pane' && b.sessionId) {
+        this.addSessionPane(b.sessionId, b.shortId);
+        this.focus = b.sessionId;
+      } else if (kind !== 'claude') {
+        this.addLaunchPane(b);
+        this.focus = this.paneIdOf(b);
+      }
+      this.zoom = undefined;
+      const how =
+        kind === 'cloud'
+          ? ` in the cloud; its work comes back on ${b.gitBranch}`
+          : kind === 'agent'
+            ? ` with ${b.agent}, starting from a summary of this conversation`
+            : b.forkMethod === 'sealed'
               ? ' (parent was mid-turn: sealed copy, its running tool is not repeated)'
               : '';
-          this.flash(`forked ${b.name}${how}`, STYLE.ok, 8000);
-          this.layoutAndRender();
-        });
-      },
+      this.flash(`forked ${b.name}${how}`, STYLE.ok, 8000);
+      this.layoutAndRender();
+    });
+  }
+
+  private askCloudMessage(b: BranchRecord): void {
+    this.prompt = {
+      label: `message to cloud fork ${b.name}`,
+      editor: new LineEditor(),
+      onSubmit: (value) =>
+        void this.op(`sending to ${b.name}…`, async () => {
+          await messageCloudFork(b, value);
+          this.flash(`sent to the cloud session of ${b.name}`, STYLE.ok);
+        }),
     };
   }
 
@@ -570,6 +779,14 @@ export class App {
       lines: [
         `Task: ${b.task}`,
         gate,
+        ...(branchKind(b) === 'cloud'
+          ? [
+              `Fetches ${b.gitBranch} from origin first${b.state === 'done' ? '' : " (the cloud session hasn't pushed yet)"}.`,
+            ]
+          : []),
+        ...(branchKind(b) === 'agent' && !this.panes.get(this.paneIdOf(b))?.exited
+          ? [`${b.agent} is still running; its uncommitted work is committed as it is now.`]
+          : []),
         "pitstop picks the safe way: a merge commit if main's tree is clean, unstaged",
         'changes if main is editing other files, otherwise it leaves the branch ready.',
       ],
@@ -781,10 +998,19 @@ export class App {
     const style = focused ? STYLE.headerFocus : isMain ? STYLE.headerMain : STYLE.header;
     screen.fill({ x: r.x, y: r.y, w: r.w, h: 1 }, ' ', style);
     const pane = this.panes.get(id);
-    const b = this.branchBySession(id);
-    const state = pane?.kind === 'session' ? sessionState(this.agents.get(id), b) : 'running';
+    const b = this.branchByPane(id);
+    const state =
+      pane?.kind === 'command'
+        ? 'running'
+        : sessionState(pane?.kind === 'session' ? this.agents.get(id) : undefined, b);
     const idx = this.order.indexOf(id) + 1;
-    const parent = b ? ` · fork of ${b.parentBranch ?? 'main'}` : '';
+    const where =
+      b && branchKind(b) === 'agent'
+        ? ` · ${b.agent}`
+        : b && branchKind(b) === 'cloud'
+          ? ' · cloud'
+          : '';
+    const parent = b ? `${where} · fork of ${b.parentBranch ?? 'main'}` : '';
     const cost = this.costs.get(id);
     const right = `${state}${cost ? ` · $${cost.usd.toFixed(2)}` : ''} `;
     const left = ` ${idx} ${stateGlyph(state)} ${this.label(id)}${parent}`;
@@ -804,8 +1030,9 @@ export class App {
     let x = 1;
     this.statusHits = [];
     this.order.forEach((id, i) => {
-      if (this.panes.get(id)?.kind !== 'session') return;
-      const state = sessionState(this.agents.get(id), this.branchBySession(id));
+      const kind = this.panes.get(id)?.kind;
+      if (!kind || kind === 'command') return;
+      const state = sessionState(this.agents.get(id), this.branchByPane(id));
       const hidden = layout.hidden.includes(id);
       const text = ` ${i + 1} ${this.label(id)} ${stateGlyph(state)}${hidden ? ' ⋯' : ''} `;
       const style =
@@ -818,8 +1045,21 @@ export class App {
       x = screen.text(x, r.y, text, style, Math.max(0, r.w - x - 30));
       this.statusHits.push({ x0, x1: x, id });
     });
-    const bg = this.branches.filter((b) => b.mode === 'bg' && LIVE_STATES.includes(b.state));
+    const live = this.branches.filter((b) => LIVE_STATES.includes(b.state));
+    const bg = live.filter((b) => b.mode === 'bg' && branchKind(b) === 'claude');
+    const cloud = live.filter(
+      (b) => branchKind(b) === 'cloud' && !this.panes.has(this.paneIdOf(b)),
+    );
     if (bg.length) x = screen.text(x + 1, r.y, `+${bg.length} bg`, STYLE.statusFork);
+    if (cloud.length) {
+      const ready = cloud.filter((b) => b.state === 'done').length;
+      x = screen.text(
+        x + 1,
+        r.y,
+        `+${cloud.length} cloud${ready ? ` (${ready} ready)` : ''}`,
+        STYLE.statusFork,
+      );
+    }
     let right: { text: string; style: string };
     if (this.busyLabel) right = { text: `⋯ ${this.busyLabel}`, style: STYLE.prompt };
     else if (this.message && this.message.until > Date.now()) right = this.message;
@@ -877,6 +1117,7 @@ export class App {
     if (this.stopped) return;
     this.saveLayout();
     this.stopped = true;
+    fs.rmSync(tuiPidFile(this.ctx.repoId), { force: true });
     for (const t of this.timers) clearInterval(t);
     if (this.renderTimer) clearTimeout(this.renderTimer);
     for (const pane of this.panes.values()) pane.dispose(); // detaches only; sessions keep running

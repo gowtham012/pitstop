@@ -10,6 +10,8 @@ export type Command =
   | 'reattach'
   | 'help'
   | 'quit'
+  | 'report'
+  | 'send'
   | 'next'
   | 'prev'
   | 'up'
@@ -36,6 +38,8 @@ const KEYS: Record<string, Command> = {
   x: 'discard',
   z: 'zoom',
   r: 'reattach',
+  e: 'report',
+  s: 'send',
   '?': 'help',
   q: 'quit',
   '\x1b[C': 'next',
@@ -139,8 +143,8 @@ export class InputRouter {
 export class LineEditor {
   value = '';
 
-  /** Returns 'submit' or 'cancel' when the line is finished. */
-  feed(data: string): 'submit' | 'cancel' | undefined {
+  /** Returns 'submit' or 'cancel' when the line is finished, 'tab' when Tab was pressed. */
+  feed(data: string): 'submit' | 'cancel' | 'tab' | undefined {
     for (let i = 0; i < data.length; i++) {
       const ch = data[i]!;
       const code = ch.charCodeAt(0);
@@ -162,6 +166,7 @@ export class LineEditor {
         return 'cancel';
       }
       if (code === 3) return 'cancel';
+      if (ch === '\t') return 'tab';
       if (code === 127 || code === 8) {
         this.value = [...this.value].slice(0, -1).join('');
         continue;

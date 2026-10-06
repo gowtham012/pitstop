@@ -5,7 +5,8 @@ import xterm from '@xterm/headless';
 
 const require = createRequire(import.meta.url);
 
-export type PaneKind = 'session' | 'command';
+/** session: `claude attach`; agent: another coding agent; cloud: `claude --cloud`; command: a one-off tool like the diff pager. */
+export type PaneKind = 'session' | 'agent' | 'cloud' | 'command';
 
 export interface PaneOptions {
   id: string;
@@ -99,6 +100,11 @@ export class Pane {
   }
 
   /** Restart the child (e.g. re-attach after the user left the session for agent view). */
+  /** Change what the next respawn() runs (e.g. an agent's resume command). */
+  setCommand(cmd: string, args: string[]): void {
+    this.opts = { ...this.opts, cmd, args };
+  }
+
   respawn(): void {
     this.kill();
     this.term.reset();

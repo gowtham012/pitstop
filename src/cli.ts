@@ -2,9 +2,16 @@ import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import readline from 'node:readline/promises';
 import { Command } from 'commander';
-import { listBranches, loadBranch, type SessionRecord } from './branches.js';
+import {
+  listBranches,
+  loadBranch,
+  saveBranch,
+  type BranchRecord,
+  type SessionRecord,
+} from './branches.js';
 import { claudeBin, listAgentsAsync, type AgentInfo } from './claude/agents.js';
 import {
+  loadConfig,
   readRepoConfig,
   repoCommands,
   repoCommandsTrusted,
@@ -14,13 +21,18 @@ import { runSync } from './core/exec.js';
 import { git, isGitRepo, repoContext } from './core/git.js';
 import { sessionsDir } from './core/paths.js';
 import { listJson } from './core/store.js';
-import { forkSession } from './fork/fork.js';
+import { originUrl } from './fork/cloud.js';
+import { recordAgentConsent } from './fork/common.js';
+import { ConfirmationNeeded, forkSession, type ForkRequest } from './fork/fork.js';
+import { buildReport, renderReportHtml, renderReportMarkdown, writeReport } from './report.js';
+import { tuiRunning } from './tui/presence.js';
 import { discardBranch, mergeBranch, pullFromParent, type MergeOptions } from './merge/merge.js';
 import { collectTouched, findOverlaps } from './radar.js';
 import { sessionCost, sessionState, treeLines, type CostInfo } from './status.js';
 import { VERSION } from './version.js';
 
 const SUBCOMMANDS = new Set([
+  'report',
   'fork',
   'merge',
   'diff',
@@ -94,6 +106,46 @@ async function runTui(argv: string[]): Promise<void> {
   process.exit(0); // the UI is torn down; don't wait on pending timers or child pipes
 }
 
+async function askYesNo(question: string): Promise<boolean> {
+  if (!process.stdin.isTTY) return false;
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const answer = await rl.question(`${question} [y/N] `);
+  rl.close();
+  return /^y(es)?$/i.test(answer.trim());
+}
+
+/** Fork, asking on the terminal when the fork would push to GitHub or send a summary elsewhere. */
+async function forkWithConsent(req: ForkRequest, yes: boolean): Promise<BranchRecord> {
+  try {
+    return await forkSession({ ...req, confirmed: yes });
+  } catch (err) {
+    if (!(err instanceof ConfirmationNeeded)) throw err;
+    process.stdout.write(`${err.message}\n`);
+    if (!(await askYesNo('Continue?'))) fail('not started (pass --yes to skip this question)');
+    const ctx = repoContext(req.cwd);
+    const agent =
+      req.agent ?? (req.preset ? loadConfig(ctx.top).presets[req.preset]?.agent : undefined);
+    if (err.what === 'agent' && agent) recordAgentConsent(ctx.repoId, agent);
+    return forkSession({ ...req, confirmed: true });
+  }
+}
+
+/** With no `pit` UI open, run a cloud or agent fork's program right here in this terminal. */
+function runLaunchHere(b: BranchRecord): void {
+  if (!b.launch) return;
+  saveBranch({ ...b, state: 'running' });
+  const res = spawnSync(b.launch.cmd, b.launch.args, {
+    cwd: b.launch.cwd,
+    env: { ...process.env, ...b.launch.env },
+    stdio: 'inherit',
+  });
+  if (res.error) fail(`could not start ${b.launch.cmd}: ${res.error.message}`);
+  if (b.kind === 'agent') {
+    const cur = loadBranch(b.repoId, b.name);
+    if (cur) saveBranch({ ...cur, state: 'idle' });
+  }
+}
+
 function buildProgram(): Command {
   const program = new Command('pit')
     .description(
@@ -111,6 +163,9 @@ function buildProgram(): Command {
     .option('--parent <session>', 'session id to fork instead of the main session')
     .option('--native', "always use Claude Code's own fork, even mid-turn")
     .option('--sealed', 'always use a sealed copy')
+    .option('--cloud', 'run as a Claude cloud session (pushes the starting point to origin)')
+    .option('--agent <name>', 'run with another agent from config, e.g. codex or gemini')
+    .option('--yes', "don't ask before pushing (cloud) or sending a summary (agent)")
     .action(
       async (
         task: string[],
@@ -121,6 +176,9 @@ function buildProgram(): Command {
           parent?: string;
           native?: boolean;
           sealed?: boolean;
+          cloud?: boolean;
+          agent?: string;
+          yes?: boolean;
         },
       ) => {
         const ctx = requireRepo();
@@ -132,15 +190,39 @@ function buildProgram(): Command {
           fail(
             'no session to fork. Start one with `pit`, or pass --parent <id> (see `claude agents`).',
           );
-        const b = await forkSession({
-          cwd: ctx.top,
-          parentSessionId: parent.sessionId,
-          task: task.join(' '),
-          preset: o.preset,
-          name: o.name,
-          mode: o.bg ? 'bg' : 'pane',
-          method: o.native ? 'native' : o.sealed ? 'sealed' : 'auto',
-        });
+        const b = await forkWithConsent(
+          {
+            cwd: ctx.top,
+            parentSessionId: parent.sessionId,
+            task: task.join(' '),
+            preset: o.preset,
+            name: o.name,
+            mode: o.bg ? 'bg' : 'pane',
+            method: o.native ? 'native' : o.sealed ? 'sealed' : 'auto',
+            cloud: o.cloud,
+            agent: o.agent,
+          },
+          !!o.yes,
+        );
+        if (b.kind === 'cloud' || b.kind === 'agent') {
+          const who = b.kind === 'cloud' ? 'a cloud session' : b.agent;
+          process.stdout.write(
+            `forked ${b.name} from ${parent.name ?? parent.sessionId.slice(0, 8)} into ${who}, starting from a summary of the conversation\n` +
+              `  branch ${b.gitBranch}   worktree ${b.worktree}\n`,
+          );
+          if (tuiRunning(ctx.repoId)) {
+            process.stdout.write('  your running `pit` opens it in a pane\n');
+          } else {
+            process.stdout.write(`  starting it here (no \`pit\` is open)…\n`);
+            runLaunchHere(b);
+            process.stdout.write(
+              b.kind === 'cloud'
+                ? `the cloud session keeps working; \`pit merge ${b.name}\` once it has pushed ${b.gitBranch}\n`
+                : `\`pit merge ${b.name}\` to bring its work back\n`,
+            );
+          }
+          return;
+        }
         process.stdout.write(
           `forked ${b.name} from ${parent.name ?? parent.sessionId.slice(0, 8)} (${b.forkMethod}${b.forkMethod === 'sealed' ? ': parent was mid-turn' : ''})\n` +
             `  session  ${b.shortId}   branch ${b.gitBranch}   port offset ${b.portOffset}\n` +
@@ -159,6 +241,7 @@ function buildProgram(): Command {
     .option('--keep', 'keep the worktree and session after merging')
     .option('--skip-tests', 'skip the test gate')
     .option('--force', 'merge even if the fork is still working')
+    .option('--from <branch>', 'cloud forks: merge this branch from origin instead of pit/<name>')
     .action(
       async (
         name: string,
@@ -167,10 +250,11 @@ function buildProgram(): Command {
           keep?: boolean;
           skipTests?: boolean;
           force?: boolean;
+          from?: string;
         },
       ) => {
         const ctx = requireRepo();
-        const res = await mergeBranch(ctx.top, name, o);
+        const res = await mergeBranch(ctx.top, name, { ...o, fromBranch: o.from });
         process.stdout.write(`${name}: ${res.strategy}: ${res.reason}\n`);
         if (res.files.length) process.stdout.write(`  files: ${res.files.join(', ')}\n`);
         if (res.gate && !res.gate.ok) process.stdout.write(`\n${res.gate.tail}\n`);
@@ -261,6 +345,33 @@ function buildProgram(): Command {
     });
 
   program
+    .command('report')
+    .description(
+      'a shareable summary of every fork: task, result, commits, changes, test gate, cost',
+    )
+    .option('--live', 'only forks that are still live')
+    .option('--html', 'a self-contained HTML page instead of Markdown')
+    .option(
+      '--out <file>',
+      'where to write it; "-" prints it (e.g. into gh pr create --body-file -)',
+    )
+    .action(async (o: { live?: boolean; html?: boolean; out?: string }) => {
+      const ctx = requireRepo();
+      const agents = await listAgentsAsync();
+      const main = await findMainSession(ctx.repoId, ctx.top, agents);
+      const report = await buildReport(ctx.top, {
+        all: !o.live,
+        mainLabel: main?.name ?? ctx.name,
+        mainSessionId: main?.sessionId,
+      });
+      if (o.out === '-') {
+        process.stdout.write(o.html ? renderReportHtml(report) : renderReportMarkdown(report));
+        return;
+      }
+      process.stdout.write(`${writeReport(report, { html: o.html, out: o.out })}\n`);
+    });
+
+  program
     .command('discard')
     .description('stop a fork and delete its worktree and branch (the conversation is kept)')
     .argument('<name>')
@@ -278,13 +389,16 @@ function buildProgram(): Command {
     .action(async (o: { yes?: boolean }) => {
       const ctx = requireRepo();
       const cmds = repoCommands(readRepoConfig(ctx.top));
-      if (!cmds.test && !cmds.setupRun)
+      if (!cmds.test && !cmds.setupRun && !cmds.agents)
         return void process.stdout.write('.pitstop.json has no commands to approve.\n');
       if (repoCommandsTrusted(ctx.top, cmds))
         return void process.stdout.write('These commands are already approved.\n');
       process.stdout.write(`.pitstop.json in ${ctx.top} wants pitstop to run:\n`);
       if (cmds.test) process.stdout.write(`  test gate:  ${cmds.test}\n`);
       if (cmds.setupRun) process.stdout.write(`  fork setup: ${cmds.setupRun}\n`);
+      for (const [name, a] of Object.entries(cmds.agents ?? {})) {
+        process.stdout.write(`  agent ${name}: ${[a.cmd, ...(a.args ?? [])].join(' ')} <prompt>\n`);
+      }
       if (!o.yes) {
         const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
         const answer = await rl.question('Allow these commands? [y/N] ');
@@ -326,6 +440,23 @@ function buildProgram(): Command {
       checks.push(['git repository', isGitRepo(process.cwd()), process.cwd()]);
       for (const [name, ok, note] of checks)
         process.stdout.write(`${ok ? '✓' : '✗'} ${name}  ${note}\n`);
+      // Optional pieces: reported, never a failure.
+      const optional: [string, boolean, string][] = [];
+      const top = isGitRepo(process.cwd()) ? repoContext(process.cwd()).top : undefined;
+      if (top) {
+        const origin = originUrl(top);
+        optional.push([
+          'cloud forks (origin remote)',
+          !!origin,
+          origin ?? 'no "origin" remote; cloud forks need one on GitHub',
+        ]);
+      }
+      for (const [name, a] of Object.entries(loadConfig(top).agents)) {
+        const found = runSync('sh', ['-c', `command -v ${JSON.stringify(a.cmd)}`]).code === 0;
+        optional.push([`${name} agent`, found, found ? a.cmd : `${a.cmd} not on PATH (optional)`]);
+      }
+      for (const [name, ok, note] of optional)
+        process.stdout.write(`${ok ? '✓' : '·'} ${name}  ${note}\n`);
       if (checks.some(([, ok]) => !ok)) process.exitCode = 1;
     });
 
