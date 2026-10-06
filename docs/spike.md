@@ -110,3 +110,19 @@ Claude Code doesn't bind `ctrl+\` in any context ([keybindings docs](https://cod
 | Worktree folder        | `~/.pitstop/worktrees`          | `<repo>/.claude/worktrees/pit-<name>` (inherits trust, same as native) |
 | Installing hooks       | plugin or global settings merge | per-session `--settings` (zero install); a plugin is optional          |
 | Main session isolation | n/a                             | `worktree.bgIsolation: none`                                           |
+
+## End-to-end check with the real CLI
+
+`scripts/e2e-real.mjs` runs the built `pit` in a pseudo-terminal against the real `claude` CLI (Claude Code 2.1.291). Run on 2026-10-06, it passed every step:
+
+1. `pit` started the main session as a background session and attached it in the left pane. Main was told the codename `BLUEBIRD-42`.
+2. `ctrl+\` `f`, then `hotfix: Create a file named hello.txt whose only content is the codename I asked you to remember. Then git commit it.`
+   - The fork opened in a right-hand pane while main stayed live.
+   - Using the conversation it inherited, the fork wrote `BLUEBIRD-42` to `hello.txt` inside `.claude/worktrees/pit-<name>`, a worktree our WorktreeCreate hook built from the snapshot commit, and committed it.
+3. The fork's own SendMessage handoff arrived in main as a native cross-session message.
+4. `ctrl+\` `m`, `y`. Result: `commit`, because main's tree was clean. `hello.txt` appeared in the main checkout as a merge commit, and the fork's worktree, branch and session were cleaned up.
+5. Asked whether it had received a pitstop-update, main named the merge and `hello.txt`. The inbox note had been delivered by the hook.
+
+The first run found one gap: the fork stopped on a permission prompt for `git add`/`git commit`. Fork sessions now pre-allow `git add/commit/status/diff/log/show` (`FORK_ALLOW` in `src/claude/settings.ts`). The PreToolUse guard still keeps those commands inside the fork's worktree.
+
+The same run also confirmed that merging a fork that is waiting for input is refused ("still working").

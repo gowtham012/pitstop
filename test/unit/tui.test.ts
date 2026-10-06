@@ -2,7 +2,7 @@ import xterm from '@xterm/headless';
 import { describe, expect, it } from 'vitest';
 import { InputRouter, LineEditor } from '../../src/tui/input.js';
 import { computeLayout, split } from '../../src/tui/layout.js';
-import { diffScreens, Screen, textWidth, truncate } from '../../src/tui/screen.js';
+import { diffScreens, Screen, stripControls, textWidth, truncate } from '../../src/tui/screen.js';
 
 const base = { visibleForks: 3, splitColumns: 160 };
 
@@ -145,6 +145,13 @@ describe('screen', () => {
     expect(textWidth('日本')).toBe(4);
     expect(truncate('hello world', 6)).toBe('hello…');
     expect(truncate('hi', 6)).toBe('hi');
+  });
+
+  it('strips escape sequences and control characters from drawn text', () => {
+    expect(stripControls('ok\x1b[2J\x1b]0;title\x07\x9b6n\x07 done')).toBe('ok6n done');
+    const s = new Screen(20, 1);
+    s.text(0, 0, 'a\x1b[31mb\rc', '0');
+    expect([0, 1, 2].map((x) => s.get(x, 0).ch).join('')).toBe('abc');
   });
 
   it('only rewrites changed cells', () => {

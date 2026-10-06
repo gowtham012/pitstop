@@ -13,6 +13,16 @@ export function hookCommand(): string {
   return `"${process.execPath}" "${hook}"`;
 }
 
+/** Commands a fork may run without a permission prompt (all confined to its worktree by the guard). */
+export const FORK_ALLOW = [
+  'Bash(git add:*)',
+  'Bash(git commit:*)',
+  'Bash(git status:*)',
+  'Bash(git diff:*)',
+  'Bash(git log:*)',
+  'Bash(git show:*)',
+];
+
 export interface SessionSettingsOptions {
   role: 'main' | 'fork';
   env?: Record<string, string>;
@@ -45,6 +55,9 @@ export function sessionSettings(opts: SessionSettingsOptions): Record<string, un
     // The main session keeps editing the user's checkout; only forks are isolated.
     settings.worktree = { bgIsolation: 'none' };
   } else {
+    // A fork is told to commit in its worktree. The PreToolUse guard keeps
+    // these commands inside that worktree, so they don't need a prompt.
+    opts.allow = [...FORK_ALLOW, ...(opts.allow ?? [])];
     hooks.WorktreeCreate = hook('WorktreeCreate');
     hooks.PreToolUse = [
       {

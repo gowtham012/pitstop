@@ -399,6 +399,18 @@ describe('git command classification', () => {
     'env git checkout -',
     'cd sub; git add -A',
     'git notes add',
+    'sudo git reset --hard',
+    'xargs -0 git rm',
+    'if git checkout main; then echo; fi',
+    'sh -c "git reset --hard"',
+    "bash -lc 'cd x && git stash'",
+    'eval "git push"',
+    'git --unknown-opt status',
+    'git --attr-source=x commit',
+    'git config --unset user.name',
+    'git config core.editor',
+    'git diff --output=/tmp/x',
+    'nohup git gc',
   ])('treats `%s` as changing state', (cmd) => {
     expect(gitMutates(cmd)).toBe(true);
   });

@@ -39,7 +39,6 @@ const READ_ONLY_GIT = new Set([
   'version',
   'help',
   'remote',
-  'config',
   'whatchanged',
   'count-objects',
   'check-ignore',
@@ -50,7 +49,7 @@ const READ_ONLY_GIT = new Set([
 const BRANCH_LIST_FLAGS =
   /^(?:-a|-r|-v|-vv|-l|--list|--all|--remotes|--verbose|--show-current|--no-column|--column(?:=.*)?|--sort=.*|--format=.*|--contains|--no-contains|--merged|--no-merged|--points-at|--color(?:=.*)?|--no-color)$/;
 
-/** git options that come before the subcommand and take a value. */
+/** git options that come before the subcommand and take a value (also accepted as --opt=value). */
 const GIT_GLOBAL_WITH_VALUE = new Set([
   '-C',
   '-c',
@@ -59,6 +58,53 @@ const GIT_GLOBAL_WITH_VALUE = new Set([
   '--namespace',
   '--exec-path',
   '--config-env',
+  '--super-prefix',
+  '--attr-source',
+  '--list-cmds',
+]);
+
+/** git options that come before the subcommand and take no value. Any other option fails closed. */
+const GIT_GLOBAL_NO_VALUE = new Set([
+  '--no-pager',
+  '-p',
+  '--paginate',
+  '-P',
+  '--bare',
+  '--no-replace-objects',
+  '--literal-pathspecs',
+  '--glob-pathspecs',
+  '--noglob-pathspecs',
+  '--icase-pathspecs',
+  '--no-optional-locks',
+  '--no-advice',
+  '--no-lazy-fetch',
+]);
+
+/** Words that run the command after them: `sudo git …`, `xargs git …`, `if git …`. */
+const WRAPPERS = new Set([
+  'sudo',
+  'doas',
+  'env',
+  'command',
+  'exec',
+  'nohup',
+  'time',
+  'nice',
+  'ionice',
+  'timeout',
+  'xargs',
+  'stdbuf',
+  'chronic',
+  '!',
+  '{',
+  'if',
+  'then',
+  'else',
+  'elif',
+  'do',
+  'while',
+  'until',
+  'builtin',
 ]);
 
 /**
@@ -143,43 +189,74 @@ function branchIsListing(args: string[]): boolean {
   return true;
 }
 
-/** True when any git invocation in `cmd` would change files, the index or refs. */
-export function gitMutates(cmd: string): boolean {
+const CONFIG_READ =
+  /^(--get|--get-all|--get-regexp|--get-urlmatch|--list|-l|--show-origin|--show-scope|--name-only)$/;
+const CONFIG_WRITE =
+  /^(--unset|--unset-all|--add|--replace-all|--rename-section|--remove-section|--edit|-e)$/;
+
+/** Classify one git invocation starting at words[start] (the `git` word). True when it changes state. */
+function gitInvocationMutates(words: string[], start: number): boolean {
+  let i = start + 1;
+  while (i < words.length && words[i]!.startsWith('-')) {
+    const opt = words[i]!;
+    const name = opt.split('=')[0]!;
+    if (opt === '--version' || opt === '--help' || opt === '-h') return false;
+    if (GIT_GLOBAL_NO_VALUE.has(opt)) i += 1;
+    else if (GIT_GLOBAL_WITH_VALUE.has(name)) i += opt.includes('=') ? 1 : 2;
+    else return true; // unknown global option: fail closed
+  }
+  const sub = words[i];
+  if (!sub) return false;
+  const args = words.slice(i + 1);
+  if (
+    ['diff', 'log', 'show', 'whatchanged'].includes(sub) &&
+    args.some((a) => a === '-o' || a.startsWith('--output'))
+  ) {
+    return true; // writes files
+  }
+  switch (sub) {
+    case 'branch':
+      return !branchIsListing(args);
+    case 'stash':
+      return !(args[0] === 'list' || args[0] === 'show');
+    case 'tag':
+      return !(
+        args.length === 0 || args.every((a) => /^(-l|--list|-n\d*|--sort=.*|--contains)$/.test(a))
+      );
+    case 'worktree':
+      return args[0] !== 'list';
+    case 'remote':
+      return args.length > 0 && !['-v', '--verbose', 'show', 'get-url'].includes(args[0]!);
+    case 'config':
+      if (args[0] === 'get' || args[0] === 'list') return false;
+      return !(args.some((a) => CONFIG_READ.test(a)) && !args.some((a) => CONFIG_WRITE.test(a)));
+    default:
+      return !READ_ONLY_GIT.has(sub);
+  }
+}
+
+const isGitWord = (w: string) => w === 'git' || w.endsWith('/git');
+
+/**
+ * True when any git invocation in `cmd` would change files, the index or refs.
+ * Looks through wrappers (sudo, xargs, if, …) and into nested shells
+ * (`sh -c "…"`, `eval "…"`), and treats anything it can't classify as a change.
+ */
+export function gitMutates(cmd: string, depth = 0): boolean {
+  if (depth > 3) return /\bgit\b/.test(cmd);
   for (const words of shellWords(cmd)) {
+    // Quoted strings with spaces may be scripts for a nested shell or eval.
+    if (words.some((w) => /\s/.test(w) && /\bgit\b/.test(w) && gitMutates(w, depth + 1)))
+      return true;
     let i = 0;
     while (i < words.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[i]!)) i++; // VAR=value prefixes
-    if (words[i] === 'command' || words[i] === 'env' || words[i] === 'exec') i++;
-    const prog = words[i];
-    if (!prog || (prog !== 'git' && !prog.endsWith('/git'))) continue;
-    i++;
-    while (i < words.length && words[i]!.startsWith('-')) {
-      const opt = words[i]!;
-      i += GIT_GLOBAL_WITH_VALUE.has(opt) ? 2 : 1;
+    if (i >= words.length) continue;
+    if (isGitWord(words[i]!)) {
+      if (gitInvocationMutates(words, i)) return true;
+    } else if (WRAPPERS.has(words[i]!)) {
+      const g = words.findIndex((w, k) => k > i && isGitWord(w));
+      if (g !== -1 && gitInvocationMutates(words, g)) return true;
     }
-    const sub = words[i];
-    if (!sub) continue;
-    const args = words.slice(i + 1);
-    if (sub === 'branch') {
-      if (branchIsListing(args)) continue;
-      return true;
-    }
-    if (sub === 'stash' && (args[0] === 'list' || args[0] === 'show')) continue;
-    if (
-      sub === 'tag' &&
-      (args.length === 0 || args.every((a) => /^(-l|--list|-n\d*|--sort=.*|--contains)$/.test(a)))
-    )
-      continue;
-    if (sub === 'worktree' && args[0] === 'list') continue;
-    if (sub === 'remote' && args.length && !['-v', 'show', 'get-url'].includes(args[0]!))
-      return true;
-    if (
-      sub === 'config' &&
-      !args.some((a) => /^(--get|--get-all|--list|-l|--get-regexp)$/.test(a))
-    ) {
-      if (args.filter((a) => !a.startsWith('-')).length >= 2) return true; // config key value
-      continue;
-    }
-    if (!READ_ONLY_GIT.has(sub)) return true;
   }
   return false;
 }

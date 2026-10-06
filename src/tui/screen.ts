@@ -53,6 +53,18 @@ export function charWidth(ch: string): number {
   return 1;
 }
 
+/**
+ * Remove escape sequences and control characters from text pitstop draws
+ * itself (file names, test output, error messages), so they can't move the
+ * cursor or change the terminal's state when written out.
+ */
+export function stripControls(s: string): string {
+  return s
+    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
+    .replace(/\x1b[\]P^_][\s\S]*?(?:\x07|\x1b\\)/g, '')
+    .replace(/[\x00-\x1f\x7f-\x9f]/g, '');
+}
+
 export function textWidth(s: string): number {
   let w = 0;
   for (const ch of s) w += charWidth(ch);
@@ -136,7 +148,7 @@ export class Screen {
   /** Write text clipped to `maxW` columns. Returns the column after the last character. */
   text(x: number, y: number, s: string, sgr: string, maxW = this.cols - x): number {
     const end = x + maxW;
-    for (const ch of s) {
+    for (const ch of stripControls(s)) {
       const w = charWidth(ch);
       if (w === 0) continue;
       if (x + w > end) break;
