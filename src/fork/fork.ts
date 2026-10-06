@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { saveBranch, upsertSession, type BranchRecord } from '../branches.js';
-import { isBusy, startBackground } from '../claude/agents.js';
+import { currentSessionId, isBusy, startBackground } from '../claude/agents.js';
 import { findTranscript } from '../claude/locate.js';
 import { sessionSettings } from '../claude/settings.js';
 import { readTranscriptSnapshot, sealTranscript, writeTranscript } from '../claude/transcript.js';
@@ -21,6 +21,7 @@ export { ConfirmationNeeded, ForkError, forkSessionName, type ForkRequest } from
  * worktree built from a snapshot of the parent's uncommitted work.
  */
 export async function forkSession(req: ForkRequest): Promise<BranchRecord> {
+  req = { ...req, parentSessionId: await currentSessionId(req.parentSessionId) };
   const kind = requestKind(req, loadConfig(repoContext(req.cwd).top));
   if (kind === 'cloud') return forkCloud(req);
   if (kind === 'agent') return forkAgent(req);

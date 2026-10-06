@@ -58,6 +58,24 @@ export async function listAgentsAsync(all = false): Promise<AgentInfo[]> {
 }
 
 /**
+ * Find a session pitstop recorded earlier. A background job keeps its short id
+ * (the first 8 characters of its first session id), but its conversation can
+ * move to a new session id, for example when its first prompt arrives. So a
+ * recorded id that no longer matches is followed through its job.
+ */
+export function findAgent(agents: AgentInfo[], sessionId: string): AgentInfo | undefined {
+  return (
+    agents.find((a) => a.sessionId === sessionId) ??
+    agents.find((a) => a.kind === 'background' && !!a.id && sessionId.startsWith(a.id))
+  );
+}
+
+/** The session id a recorded session talks under now (unchanged if it isn't running). */
+export async function currentSessionId(sessionId: string): Promise<string> {
+  return findAgent(await listAgentsAsync(true), sessionId)?.sessionId ?? sessionId;
+}
+
+/**
  * True when the session is mid-turn: running a tool, or waiting on a permission
  * prompt for one. A native fork of such a session re-runs the pending call.
  */

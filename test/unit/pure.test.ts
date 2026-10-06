@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { backgroundArgs, isBusy, parseAgents, parseBackgrounded } from '../../src/claude/agents.js';
+import {
+  backgroundArgs,
+  findAgent,
+  isBusy,
+  parseAgents,
+  parseBackgrounded,
+} from '../../src/claude/agents.js';
 import { DEFAULT_CONFIG, mergeConfig, parseTaskInput, prefixByte } from '../../src/core/config.js';
 import { parsePorcelainZ } from '../../src/core/git.js';
 import { isInside, slugify } from '../../src/core/paths.js';
@@ -472,5 +478,21 @@ describe('git output files', () => {
         toolInput: { command: 'git diff --output=changes.patch' },
       }).deny,
     ).toBe(false);
+  });
+});
+
+describe('findAgent', () => {
+  const job = {
+    id: 'c3fb8d1c',
+    kind: 'background',
+    sessionId: '4e710c60-7775-4e4f-8f64-57cf9356e32b',
+  };
+  it('follows a background job whose conversation moved to a new session id', () => {
+    expect(findAgent([job], 'c3fb8d1c-4515-4ed2-ac43-efdf300abb18')).toBe(job);
+    expect(findAgent([job], job.sessionId)).toBe(job);
+  });
+  it('does not match unrelated or interactive sessions', () => {
+    expect(findAgent([job], '00b4d8e3-1aef-4d89-b21f-dc4e16796c50')).toBeUndefined();
+    expect(findAgent([{ ...job, kind: 'interactive' }], 'c3fb8d1c-4515')).toBeUndefined();
   });
 });
