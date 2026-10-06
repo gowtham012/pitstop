@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-12 -12 1024 324" width="1024" height="324" role="img" aria-label="Byte-level view of the parent transcript file. pitstop records the file size, reads up to it without a lock, drops a torn last line and a tool_use with no result, cuts after the last end_turn, and writes a rewritten copy plus the urgent task to a new file. The parent file is never written.">
+<title>Byte-level view of the parent transcript file. pitstop records the file size, reads up to it without a lock, drops a torn last line and a tool_use with no result, cuts after the last end_turn, and writes a rewritten copy plus the urgent task to a new file. The parent file is never written.</title>
+<style>
+:root{--bg:#F2F4F3;--surface:#FFFFFF;--fg:#1B1F22;--muted:#5A6369;--line:#C4CACD;--lane:#E7EBEA;--main:#2C6A9E;--main-soft:#D4E3EF;--fork:#B8730A;--fork-soft:#F5E2C2;--ok:#2E7D4F;
+--display:"Barlow Condensed","Arial Narrow","Helvetica Neue",Arial,sans-serif;--body:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+@media (prefers-color-scheme: dark){:root{--bg:#0D1117;--surface:#161B22;--fg:#E6EDF3;--muted:#9AA4AD;--line:#3A4247;--lane:#1B2127;--main:#6FA8D8;--main-soft:#1D3245;--fork:#E3A33B;--fork-soft:#3B2C12;--ok:#5DBB85}}
+text{font-family:var(--body);fill:var(--fg);font-size:13px}
+.mono{font-family:var(--mono);font-size:12px}
+.sm{font-size:11px;fill:var(--muted)}
+.lane-label{font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:.06em;fill:var(--muted)}
+.lane{fill:var(--lane)}
+.stroke{stroke:var(--muted);fill:none;stroke-width:1.5}
+.stroke-m{stroke:var(--main);fill:none;stroke-width:2}
+.stroke-f{stroke:var(--fork);fill:none;stroke-width:2}
+.dash{stroke-dasharray:5 4}.dot{stroke-dasharray:2 4}
+.box{fill:var(--surface);stroke:var(--line);stroke-width:1.2}
+.box-m{fill:var(--main-soft);stroke:var(--main);stroke-width:1.4}
+.box-f{fill:var(--fork-soft);stroke:var(--fork);stroke-width:1.4}
+.box-cli{fill:var(--surface);stroke:var(--fg);stroke-width:1.4}
+.fill-m{fill:var(--main)}.fill-f{fill:var(--fork)}.fill-n{fill:var(--muted)}.fill-bg{fill:var(--surface)}
+.t-m{fill:var(--main)}.t-f{fill:var(--fork)}.t-ok{fill:var(--ok)}
+.on-dark{fill:var(--surface);font-family:var(--mono);font-size:11px}
+.b{font-weight:600}
+.mk-n{fill:var(--muted)}.mk-m{fill:var(--main)}.mk-f{fill:var(--fork)}
+.backdrop{fill:var(--bg)}
+</style>
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-n" d="M0 0L10 5L0 10z"/></marker>
+<marker id="ahm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-m" d="M0 0L10 5L0 10z"/></marker>
+<marker id="ahf" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-f" d="M0 0L10 5L0 10z"/></marker>
+</defs>
+<rect class="backdrop" x="-12" y="-12" width="1024" height="324" rx="14"/>
+
+          <text class="sm" x="30" y="30">parent transcript · append-only · the main session is still writing to it</text>
+          <text class="sm" x="765" y="30" text-anchor="middle" style="fill:var(--fork)">not copied</text>
+
+          <!-- parent records -->
+          <rect class="box-m" x="30" y="44" width="100" height="44" rx="3"/>
+          <text class="b" x="80" y="62" text-anchor="middle" style="font-size:12px">user</text><text class="sm" x="80" y="78" text-anchor="middle">your task</text>
+          <rect class="box-m" x="130" y="44" width="110" height="44" rx="3"/>
+          <text class="b" x="185" y="62" text-anchor="middle" style="font-size:12px">assistant</text><text class="sm t-ok" x="185" y="78" text-anchor="middle" style="fill:var(--ok)">end_turn ✓</text>
+          <rect class="box-m" x="240" y="44" width="100" height="44" rx="3"/>
+          <text class="b" x="290" y="62" text-anchor="middle" style="font-size:12px">user</text><text class="sm" x="290" y="78" text-anchor="middle">next prompt</text>
+          <rect class="box-m" x="340" y="44" width="110" height="44" rx="3"/>
+          <text class="b" x="395" y="62" text-anchor="middle" style="font-size:12px">assistant</text><text class="sm" x="395" y="78" text-anchor="middle">tool_use Edit</text>
+          <rect class="box-m" x="450" y="44" width="110" height="44" rx="3"/>
+          <text class="b" x="505" y="62" text-anchor="middle" style="font-size:12px">user</text><text class="sm" x="505" y="78" text-anchor="middle">tool_result ✓</text>
+          <rect class="box-m" x="560" y="44" width="110" height="44" rx="3"/>
+          <text class="b" x="615" y="62" text-anchor="middle" style="font-size:12px">assistant</text><text class="sm" x="615" y="78" text-anchor="middle" style="fill:var(--ok)">end_turn ✓</text>
+          <rect class="fill-bg" x="670" y="44" width="130" height="44" rx="3" style="stroke:var(--main);stroke-width:1.4;stroke-dasharray:5 4"/>
+          <text class="b" x="735" y="62" text-anchor="middle" style="font-size:12px">assistant</text><text class="sm" x="735" y="78" text-anchor="middle">tool_use pytest…</text>
+          <rect class="fill-bg" x="800" y="44" width="70" height="44" rx="3" style="stroke:var(--muted);stroke-width:1.2;stroke-dasharray:2 3"/>
+          <text class="sm" x="835" y="62" text-anchor="middle">{"type":"as</text><text class="sm" x="835" y="78" text-anchor="middle">torn line</text>
+
+          <!-- writer keeps appending -->
+          <line class="stroke-m dash" x1="878" y1="66" x2="985" y2="66" marker-end="url(#ahm)"/>
+          <text class="sm" x="930" y="56" text-anchor="middle" style="fill:var(--main)">keeps appending</text>
+
+          <!-- frozen size -->
+          <line x1="870" y1="36" x2="870" y2="108" style="stroke:var(--fg);stroke-width:2"/>
+          <text class="sm b" x="870" y="124" text-anchor="middle" style="fill:var(--fg)">size frozen: 48,213 B</text>
+
+          <!-- read range -->
+          <line class="stroke" x1="30" y1="100" x2="864" y2="100" marker-end="url(#ah)"/>
+          <text class="sm" x="40" y="118">① read bytes 0 … size · read only · no lock</text>
+
+          <!-- cut -->
+          <line class="stroke-f dash" x1="670" y1="36" x2="670" y2="152"/>
+          <path class="stroke-f" d="M862 140 H 676" marker-end="url(#ahf)"/>
+          <text class="sm" x="770" y="156" text-anchor="middle">② ③ walk back</text>
+          <text class="sm b" x="600" y="168" text-anchor="middle" style="fill:var(--fork)">cut after last end_turn</text>
+
+          <!-- copy down -->
+          <line class="stroke-f" x1="350" y1="128" x2="350" y2="206" marker-end="url(#ahf)"/>
+          <text class="sm" x="358" y="172">④ copy, new sessionId / cwd</text>
+
+          <text class="sm" x="30" y="202">fork transcript · new file in the worktree's project folder</text>
+          <rect class="box-f" x="30" y="212" width="640" height="40" rx="3"/>
+          <text x="350" y="237" text-anchor="middle" style="font-size:12.5px">same 6 records, ids rewritten</text>
+          <rect class="fill-f" x="676" y="212" width="160" height="40" rx="3"/>
+          <text x="756" y="237" text-anchor="middle" class="on-dark" style="font-size:12px">+ your urgent task</text>
+
+          <text class="b" x="30" y="284" style="font-size:12.5px;fill:var(--main)">The parent file is never written, locked, renamed or truncated.</text>
+        
+</svg>

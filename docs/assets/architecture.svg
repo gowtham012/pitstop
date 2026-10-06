@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-12 -26 1024 354" width="1024" height="354" role="img" aria-label="Component diagram: the pit CLI launches Claude Code, drives git, reads and writes transcripts in ~/.claude/projects, and writes branch records and inbox messages to ~/.pitstop. Claude Code fires plugin hooks that register sessions and claim inbox messages.">
+<title>Component diagram: the pit CLI launches Claude Code, drives git, reads and writes transcripts in ~/.claude/projects, and writes branch records and inbox messages to ~/.pitstop. Claude Code fires plugin hooks that register sessions and claim inbox messages.</title>
+<style>
+:root{--bg:#F2F4F3;--surface:#FFFFFF;--fg:#1B1F22;--muted:#5A6369;--line:#C4CACD;--lane:#E7EBEA;--main:#2C6A9E;--main-soft:#D4E3EF;--fork:#B8730A;--fork-soft:#F5E2C2;--ok:#2E7D4F;
+--display:"Barlow Condensed","Arial Narrow","Helvetica Neue",Arial,sans-serif;--body:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+@media (prefers-color-scheme: dark){:root{--bg:#0D1117;--surface:#161B22;--fg:#E6EDF3;--muted:#9AA4AD;--line:#3A4247;--lane:#1B2127;--main:#6FA8D8;--main-soft:#1D3245;--fork:#E3A33B;--fork-soft:#3B2C12;--ok:#5DBB85}}
+text{font-family:var(--body);fill:var(--fg);font-size:13px}
+.mono{font-family:var(--mono);font-size:12px}
+.sm{font-size:11px;fill:var(--muted)}
+.lane-label{font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:.06em;fill:var(--muted)}
+.lane{fill:var(--lane)}
+.stroke{stroke:var(--muted);fill:none;stroke-width:1.5}
+.stroke-m{stroke:var(--main);fill:none;stroke-width:2}
+.stroke-f{stroke:var(--fork);fill:none;stroke-width:2}
+.dash{stroke-dasharray:5 4}.dot{stroke-dasharray:2 4}
+.box{fill:var(--surface);stroke:var(--line);stroke-width:1.2}
+.box-m{fill:var(--main-soft);stroke:var(--main);stroke-width:1.4}
+.box-f{fill:var(--fork-soft);stroke:var(--fork);stroke-width:1.4}
+.box-cli{fill:var(--surface);stroke:var(--fg);stroke-width:1.4}
+.fill-m{fill:var(--main)}.fill-f{fill:var(--fork)}.fill-n{fill:var(--muted)}.fill-bg{fill:var(--surface)}
+.t-m{fill:var(--main)}.t-f{fill:var(--fork)}.t-ok{fill:var(--ok)}
+.on-dark{fill:var(--surface);font-family:var(--mono);font-size:11px}
+.b{font-weight:600}
+.mk-n{fill:var(--muted)}.mk-m{fill:var(--main)}.mk-f{fill:var(--fork)}
+.backdrop{fill:var(--bg)}
+</style>
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-n" d="M0 0L10 5L0 10z"/></marker>
+<marker id="ahm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-m" d="M0 0L10 5L0 10z"/></marker>
+<marker id="ahf" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-f" d="M0 0L10 5L0 10z"/></marker>
+</defs>
+<rect class="backdrop" x="-12" y="-26" width="1024" height="354" rx="14"/>
+
+          <!-- top route -->
+          <path class="stroke" d="M150 40 V 6 H 870 V 36" marker-end="url(#ah)"/>
+          <text class="sm" x="510" y="0" text-anchor="middle">reads parent transcript · writes trimmed fork copy</text>
+
+          <rect class="box-cli" x="40" y="40" width="220" height="80" rx="6"/>
+          <text class="b" x="56" y="66">pit · split-pane TUI</text>
+          <text class="mono" x="56" y="88" style="fill:var(--fork)">one pty per session</text>
+          <text class="mono" x="56" y="106" style="fill:var(--fork)">hotkeys · status bar</text>
+
+          <rect class="box" x="400" y="40" width="220" height="80" rx="6"/>
+          <text class="b" x="416" y="66">Claude Code</text>
+          <text class="mono" x="416" y="88">claude --resume &#60;forkId&#62;</text>
+          <text class="mono" x="416" y="106">claude -p   (bg forks)</text>
+
+          <rect class="box" x="760" y="40" width="220" height="80" rx="6"/>
+          <text class="b mono" x="776" y="66" style="font-size:12.5px">~/.claude/projects/</text>
+          <text class="sm" x="776" y="88" style="font-size:12px">one .jsonl transcript</text>
+          <text class="sm" x="776" y="106" style="font-size:12px">per session</text>
+
+          <rect class="box" x="40" y="210" width="220" height="90" rx="6"/>
+          <text class="b" x="56" y="236">git</text>
+          <text class="mono" x="56" y="258">worktree · snapshot</text>
+          <text class="mono" x="56" y="276">rebase · merge</text>
+
+          <rect class="box-f" x="400" y="210" width="220" height="90" rx="6"/>
+          <text class="b" x="416" y="236">pitstop plugin hooks</text>
+          <text class="mono" x="416" y="258">SessionStart / End</text>
+          <text class="mono" x="416" y="276">PostToolUse · Prompt</text>
+
+          <rect class="box" x="760" y="210" width="220" height="90" rx="6"/>
+          <text class="b mono" x="776" y="236" style="font-size:12.5px">~/.pitstop/</text>
+          <text class="mono" x="776" y="258">sessions/ branches/</text>
+          <text class="mono" x="776" y="276">inbox/ logs/ worktrees/</text>
+
+          <!-- edges -->
+          <line class="stroke" x1="260" y1="80" x2="396" y2="80" marker-end="url(#ah)"/>
+          <text class="sm" x="328" y="72" text-anchor="middle">hosts in panes</text>
+
+          <line class="stroke" x1="620" y1="80" x2="756" y2="80" marker-end="url(#ah)" marker-start="url(#ah)"/>
+          <text class="sm" x="688" y="72" text-anchor="middle">reads / writes</text>
+
+          <line class="stroke" x1="150" y1="120" x2="150" y2="206" marker-end="url(#ah)"/>
+          <text class="sm" x="142" y="160" text-anchor="end">worktree,</text>
+          <text class="sm" x="142" y="174" text-anchor="end">snapshot, merge</text>
+
+          <line class="stroke-f" x1="510" y1="120" x2="510" y2="206" marker-end="url(#ahf)"/>
+          <text class="sm" x="518" y="150">fires events</text>
+
+          <polyline class="stroke" points="260,108 320,176 700,176 756,232" marker-end="url(#ah)"/>
+          <text class="sm" x="420" y="194" text-anchor="middle">branch records, inbox messages</text>
+
+          <line class="stroke-f" x1="620" y1="262" x2="756" y2="262" marker-end="url(#ahf)" marker-start="url(#ahf)"/>
+          <text class="sm" x="688" y="254" text-anchor="middle">register, claim inbox</text>
+        
+</svg>

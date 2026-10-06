@@ -1,0 +1,50 @@
+name: Bug report
+description: Something in pitstop doesn't work as described
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. pit
+        2. ctrl+\ f "…"
+        3. …
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Split-pane UI / rendering
+        - Forking (Claude)
+        - Cloud forks
+        - Agent forks (Codex, Gemini, …)
+        - Merging / test gate
+        - Report / tree / log
+        - Install / doctor
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: Paste the output of `pit doctor`, plus your terminal app and OS.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Anything in ~/.pitstop/logs/ (hook-errors.log, *-setup.log) that looks related. Remove anything private first.
+      render: text

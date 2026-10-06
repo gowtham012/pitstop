@@ -9,11 +9,11 @@ Prints a JSON array of live sessions. Interactive sessions look like this:
 ```json
 {
   "pid": 94,
-  "cwd": "/home/user/GetPitlane",
+  "cwd": "/home/me/my-app",
   "kind": "interactive",
   "startedAt": 1791303637452,
-  "sessionId": "adbc5b98-…",
-  "name": "getpitlane-20",
+  "sessionId": "6f1c2a90-…",
+  "name": "my-app-20",
   "status": "busy"
 }
 ```

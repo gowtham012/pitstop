@@ -9,7 +9,8 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "engines": {
     "node": ">=20"
@@ -24,18 +25,29 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "pretest": "tsup",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "prepare": "tsup"
   },
   "keywords": [
     "claude",
     "claude-code",
-    "agents",
+    "ai-agents",
+    "coding-agent",
     "fork",
-    "worktree",
-    "tui"
+    "git-worktree",
+    "tmux",
+    "tui",
+    "terminal",
+    "codex",
+    "gemini-cli",
+    "developer-tools"
   ],
   "author": "Gowtham Kumar Solleti",
   "license": "MIT",
+  "homepage": "https://github.com/gowtham012/pitstop#readme",
+  "bugs": {
+    "url": "https://github.com/gowtham012/pitstop/issues"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/gowtham012/pitstop.git"

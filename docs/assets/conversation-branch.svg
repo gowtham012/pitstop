@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-12 -12 1024 274" width="1024" height="274" role="img" aria-label="Message tree: main session messages m1 to m6, with m6 waiting on a running tool. The fork copies m1 to m4, cuts at the last complete turn, adds f1 to f3, and f3's summary flows back to the main session as m7.">
+<title>Message tree: main session messages m1 to m6, with m6 waiting on a running tool. The fork copies m1 to m4, cuts at the last complete turn, adds f1 to f3, and f3's summary flows back to the main session as m7.</title>
+<style>
+:root{--bg:#F2F4F3;--surface:#FFFFFF;--fg:#1B1F22;--muted:#5A6369;--line:#C4CACD;--lane:#E7EBEA;--main:#2C6A9E;--main-soft:#D4E3EF;--fork:#B8730A;--fork-soft:#F5E2C2;--ok:#2E7D4F;
+--display:"Barlow Condensed","Arial Narrow","Helvetica Neue",Arial,sans-serif;--body:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+@media (prefers-color-scheme: dark){:root{--bg:#0D1117;--surface:#161B22;--fg:#E6EDF3;--muted:#9AA4AD;--line:#3A4247;--lane:#1B2127;--main:#6FA8D8;--main-soft:#1D3245;--fork:#E3A33B;--fork-soft:#3B2C12;--ok:#5DBB85}}
+text{font-family:var(--body);fill:var(--fg);font-size:13px}
+.mono{font-family:var(--mono);font-size:12px}
+.sm{font-size:11px;fill:var(--muted)}
+.lane-label{font-family:var(--display);font-weight:700;font-size:15px;letter-spacing:.06em;fill:var(--muted)}
+.lane{fill:var(--lane)}
+.stroke{stroke:var(--muted);fill:none;stroke-width:1.5}
+.stroke-m{stroke:var(--main);fill:none;stroke-width:2}
+.stroke-f{stroke:var(--fork);fill:none;stroke-width:2}
+.dash{stroke-dasharray:5 4}.dot{stroke-dasharray:2 4}
+.box{fill:var(--surface);stroke:var(--line);stroke-width:1.2}
+.box-m{fill:var(--main-soft);stroke:var(--main);stroke-width:1.4}
+.box-f{fill:var(--fork-soft);stroke:var(--fork);stroke-width:1.4}
+.box-cli{fill:var(--surface);stroke:var(--fg);stroke-width:1.4}
+.fill-m{fill:var(--main)}.fill-f{fill:var(--fork)}.fill-n{fill:var(--muted)}.fill-bg{fill:var(--surface)}
+.t-m{fill:var(--main)}.t-f{fill:var(--fork)}.t-ok{fill:var(--ok)}
+.on-dark{fill:var(--surface);font-family:var(--mono);font-size:11px}
+.b{font-weight:600}
+.mk-n{fill:var(--muted)}.mk-m{fill:var(--main)}.mk-f{fill:var(--fork)}
+.backdrop{fill:var(--bg)}
+</style>
+<defs>
+<marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-n" d="M0 0L10 5L0 10z"/></marker>
+<marker id="ahm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-m" d="M0 0L10 5L0 10z"/></marker>
+<marker id="ahf" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk-f" d="M0 0L10 5L0 10z"/></marker>
+</defs>
+<rect class="backdrop" x="-12" y="-12" width="1024" height="274" rx="14"/>
+
+          <rect class="box-f" x="50" y="30" width="440" height="100" rx="8" opacity=".55"/>
+          <text class="sm t-f b" x="62" y="48" style="fill:var(--fork)">copied into the fork</text>
+
+          <!-- main chain -->
+          <line class="stroke-m" x1="104" y1="80" x2="186" y2="80"/>
+          <line class="stroke-m" x1="214" y1="80" x2="296" y2="80"/>
+          <line class="stroke-m" x1="324" y1="80" x2="406" y2="80"/>
+          <line class="stroke-m" x1="434" y1="80" x2="546" y2="80"/>
+          <line class="stroke-m" x1="574" y1="80" x2="656" y2="80"/>
+          <line class="stroke-m dash" x1="684" y1="80" x2="882" y2="80" marker-end="url(#ahm)"/>
+          <text class="sm" x="785" y="72" text-anchor="middle">later</text>
+
+          <g>
+            <circle class="fill-m" cx="90" cy="80" r="14"/><text class="on-dark" x="90" y="84" text-anchor="middle">m1</text>
+            <circle class="fill-m" cx="200" cy="80" r="14"/><text class="on-dark" x="200" y="84" text-anchor="middle">m2</text>
+            <circle class="fill-m" cx="310" cy="80" r="14"/><text class="on-dark" x="310" y="84" text-anchor="middle">m3</text>
+            <circle class="fill-m" cx="420" cy="80" r="14"/><text class="on-dark" x="420" y="84" text-anchor="middle">m4</text>
+            <circle class="fill-m" cx="560" cy="80" r="14"/><text class="on-dark" x="560" y="84" text-anchor="middle">m5</text>
+            <circle class="fill-bg stroke-m dash" cx="670" cy="80" r="14"/><text class="mono t-m" x="670" y="84" text-anchor="middle" style="font-size:11px">m6</text>
+            <circle class="fill-m" cx="900" cy="80" r="14"/><text class="on-dark" x="900" y="84" text-anchor="middle">m7</text>
+          </g>
+          <text class="sm" x="90" y="114" text-anchor="middle">your task</text>
+          <text class="sm" x="200" y="114" text-anchor="middle">plan</text>
+          <text class="sm" x="310" y="114" text-anchor="middle">edits</text>
+          <text class="sm" x="420" y="114" text-anchor="middle">turn ends</text>
+          <text class="sm" x="560" y="114" text-anchor="middle">runs pytest</text>
+          <text class="sm" x="670" y="114" text-anchor="middle">result pending</text>
+          <text class="sm" x="900" y="114" text-anchor="middle">sees update</text>
+
+          <!-- cut -->
+          <line class="stroke dash" x1="490" y1="18" x2="490" y2="135"/>
+          <text class="sm b" x="490" y="150" text-anchor="middle" style="fill:var(--fg)">cut: last complete turn</text>
+
+          <!-- fork chain -->
+          <path class="stroke-f" d="M420 94 C 420 180, 490 200, 542 200" marker-end="url(#ahf)"/>
+          <line class="stroke-f" x1="574" y1="200" x2="656" y2="200"/>
+          <line class="stroke-f" x1="684" y1="200" x2="766" y2="200"/>
+          <circle class="fill-f" cx="560" cy="200" r="14"/><text class="on-dark" x="560" y="204" text-anchor="middle">f1</text>
+          <circle class="fill-f" cx="670" cy="200" r="14"/><text class="on-dark" x="670" y="204" text-anchor="middle">f2</text>
+          <circle class="fill-f" cx="780" cy="200" r="14"/><text class="on-dark" x="780" y="204" text-anchor="middle">f3</text>
+          <text class="sm" x="560" y="234" text-anchor="middle">urgent task</text>
+          <text class="sm" x="670" y="234" text-anchor="middle">fix + test</text>
+          <text class="sm" x="780" y="234" text-anchor="middle">handoff note</text>
+
+          <path class="stroke-f dash" d="M794 200 C 870 200, 900 170, 900 100" marker-end="url(#ahf)"/>
+          <text class="sm" x="908" y="160">summary</text>
+          <text class="sm" x="908" y="174">via inbox</text>
+        
+</svg>
