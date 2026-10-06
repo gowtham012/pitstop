@@ -25,6 +25,8 @@ import { recordAgentConsent } from './fork/common.js';
 import { ConfirmationNeeded, forkSession, type ForkRequest } from './fork/fork.js';
 import { buildReport, renderReportHtml, renderReportMarkdown, writeReport } from './report.js';
 import { tuiRunning } from './tui/presence.js';
+import { ensureMainSession, mainStatus } from './fork/main.js';
+import { ResumeError, resumeFork } from './fork/resume.js';
 import { installKind, loadState, packageRoot, upgrade } from './upgrade.js';
 import { loadPty } from './tui/pty.js';
 import {
@@ -55,6 +57,7 @@ const SUBCOMMANDS = new Set([
   'trust',
   'doctor',
   'upgrade',
+  'resume',
   'help',
 ]);
 
@@ -107,13 +110,15 @@ async function runTui(argv: string[]): Promise<void> {
   }
   const ctx = requireRepo();
   let mainSessionId: string | undefined;
+  let fresh = false;
   const claudeArgs: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--main') mainSessionId = argv[++i];
+    else if (argv[i] === '--new') fresh = true;
     else claudeArgs.push(argv[i]!);
   }
   const { App } = await import('./tui/app.js');
-  const app = new App({ cwd: ctx.top, claudeArgs, mainSessionId });
+  const app = new App({ cwd: ctx.top, claudeArgs, mainSessionId, fresh });
   await app.run();
   process.exit(0); // the UI is torn down; don't wait on pending timers or child pipes
 }
@@ -473,6 +478,37 @@ function buildProgram(): Command {
       process.stdout.write(
         'Approved. If .pitstop.json changes these commands, pitstop asks again.\n',
       );
+    });
+
+  program
+    .command('resume')
+    .description(
+      'continue a stopped session: main, or the fork you name (pit does this by itself on start)',
+    )
+    .argument('[name]', 'fork to resume (default: the main session)')
+    .action(async (name: string | undefined) => {
+      const ctx = requireRepo();
+      try {
+        if (name) {
+          const b = await resumeFork(ctx.top, name);
+          process.stdout.write(
+            `resumed ${b.name}\n${tuiRunning(ctx.repoId) ? '  your running pit shows it in a pane\n' : `  claude attach ${b.shortId}   to open it here, or run pit\n`}`,
+          );
+          return;
+        }
+        const st = await mainStatus(ctx.top);
+        if (st.running)
+          return void process.stdout.write(
+            `main (${st.running.name ?? 'main'}) is already running\n`,
+          );
+        if (!st.previous) fail('no earlier main conversation in this repo; run `pit` to start one');
+        const m = await ensureMainSession(ctx.top);
+        if (m.resumeError) fail(`couldn't continue main's last conversation: ${m.resumeError}`);
+        process.stdout.write(`resumed main's last conversation (${m.name})\n`);
+      } catch (err) {
+        if (err instanceof ResumeError) fail(err.message);
+        throw err;
+      }
     });
 
   program

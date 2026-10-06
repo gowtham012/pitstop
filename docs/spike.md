@@ -159,3 +159,13 @@ Agent forks run against a fake agent binary. Tested:
 
 - One cloud fork against `gowtham012/pitstop` once that repo exists: confirm the session URL is captured, the cloud pushes `pit/<name>`, `pit merge` brings it home, and the branch is deleted. Then archive the session.
 - Codex and Gemini CLI aren't installed or signed in here. The README gives the steps to try them.
+
+## Resuming a stopped session
+
+Checked on 2026-10-06 against Claude Code **2.1.292**. A background session learned the codename `ORCA-7`, was stopped with `claude stop`, and then:
+
+- `claude --resume <id> --bg "<prompt>"` printed `note: woke session a2632d25 with its saved options (-n)` and continued **the same session**, which answered `ORCA-7`.
+- `claude --resume <id> --bg` with no prompt woke it idle: `backgrounded · a2632d25 · rs-test (idle — send a prompt to start)`.
+- Adding any flag (here `-n`) printed `background session a2632d25 keeps its own saved options, so the flags you passed started a copy as 41a2ecac`. The copy has the full history, but it's a new session.
+
+**pitstop:** resume wakes main and forks with exactly `claude --bg --resume <id>` from the folder each was launched in, so they keep their hooks, environment and preset. Only when you pass your own flags to `pit` (`pit --model …`) does main continue as a copy with those flags.

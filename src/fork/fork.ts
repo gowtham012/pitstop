@@ -87,6 +87,7 @@ async function forkClaude(req: ForkRequest): Promise<BranchRecord> {
       ...branch,
       sessionId: launched.sessionId,
       shortId: launched.shortId,
+      sessionCwd: launchCwd,
       forkMethod: sealed ? 'sealed' : 'native',
       pendingAtFork: pending,
       state: 'running',

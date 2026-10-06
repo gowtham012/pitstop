@@ -26,6 +26,18 @@ export function findTranscript(sessionId: string): string | undefined {
   return undefined;
 }
 
+/** Of these session ids, the one whose conversation was written to most recently. */
+export function latestConversation(sessionIds: string[]): string | undefined {
+  let best: { id: string; mtime: number } | undefined;
+  for (const id of new Set(sessionIds)) {
+    const file = findTranscript(id);
+    if (!file) continue;
+    const mtime = fs.statSync(file).mtimeMs;
+    if (!best || mtime > best.mtime) best = { id, mtime };
+  }
+  return best?.id;
+}
+
 /**
  * Delete a session's conversation: `<id>.jsonl` and the `<id>/` folder beside it.
  * Only files named after this session id inside Claude's projects folder are touched.

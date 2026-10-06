@@ -100,6 +100,11 @@ export interface BackgroundLaunch {
   resume?: string;
   /** Continue `resume` under its own id instead of copying it (used for sealed copies). */
   continueSession?: boolean;
+  /**
+   * Wake a stopped background session: `--bg --resume <id>` and nothing else. It keeps its
+   * saved options (name, settings, model); passing any flag would start a copy instead.
+   */
+  wake?: boolean;
   settings?: Record<string, unknown>;
   model?: string;
   effort?: string;
@@ -113,6 +118,7 @@ export interface BackgroundLaunch {
  * Permissions and hooks travel inside --settings instead, and the prompt is last.
  */
 export function backgroundArgs(l: BackgroundLaunch): string[] {
+  if (l.wake && l.resume) return ['--bg', '--resume', l.resume];
   const args = ['--bg', '-n', l.name];
   if (l.resume) {
     args.push('--resume', l.resume);

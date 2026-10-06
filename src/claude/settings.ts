@@ -49,7 +49,8 @@ export function sessionSettings(opts: SessionSettingsOptions): Record<string, un
   const settings: Record<string, unknown> = {
     hooks,
     crossSessionInbound: 'accept',
-    env: { PITSTOP_HOME: pitstopHome(), ...opts.env },
+    // PITSTOP_ROLE lets the hook tell main from a fork when a conversation moves to a new id.
+    env: { PITSTOP_HOME: pitstopHome(), PITSTOP_ROLE: opts.role, ...opts.env },
   };
   if (opts.role === 'main') {
     // The main session keeps editing the user's checkout; only forks are isolated.

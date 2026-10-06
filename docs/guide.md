@@ -175,6 +175,13 @@ Press **F10** twice, or click **Quit** in the bottom bar and press Enter (`ctrl+
 - Run `pit` again in the same repo to get the same panes back.
 - Codex and Gemini panes do stop when you quit; pitstop resumes them next time.
 
+**After a reboot or a crash.** Run `pit` as usual. If main's session stopped, pitstop continues its last conversation instead of starting a new one, and every fork that had a pane is continued too, in its own worktree with its preset. The status bar says `resumed main's last conversation and 2 forks`.
+
+- A pane whose session stopped while `pit` was open says `stopped · click or ctrl+\ r to resume` in its bottom border. Click it.
+- `pit resume <name>` continues one fork from the command line; `pit resume` continues main.
+- `pit --new` starts a fresh main conversation instead.
+- A fork stopped at its budget isn't resumed; raise `budgetUsd` in its preset first.
+
 ## Everyday recipes
 
 All of these work from a second terminal or a script. A running `pit` picks up new forks and opens a pane for them.

@@ -30,6 +30,8 @@ export interface BranchRecord {
   sessionId?: string;
   shortId?: string;
   sessionName: string;
+  /** Folder the session was launched from; Claude files its conversation under it, so resume starts there. */
+  sessionCwd?: string;
   /** Where the fork runs. Missing on records from before cloud and agent forks: treat as 'claude'. */
   kind?: 'claude' | 'cloud' | 'agent';
   /** Key of `agents` in config, for kind 'agent'. */

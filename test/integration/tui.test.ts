@@ -392,4 +392,53 @@ describe('pit split-pane UI', () => {
     while (!d.exited() && Date.now() - start < 5000) await new Promise((r) => setTimeout(r, 100));
     expect(d.exited()).toBe(true);
   });
+
+  it('after a reboot, pit continues main and its forks; pit resume works from the command line', async () => {
+    d = drive(repo);
+    await d.waitFor(/fake claude session/);
+    d.send('\x1bOQ');
+    await d.waitFor(/task/);
+    d.send('survive me\r');
+    await d.waitFor(/2 . survive-me/);
+    d.send('\x1b[21~');
+    await d.waitFor(/Quit pit\?/);
+    d.send('\x1b[21~');
+    const t0 = Date.now();
+    while (!d.exited() && Date.now() - t0 < 5000) await new Promise((r) => setTimeout(r, 100));
+
+    // the machine restarts: no session is running, the conversations are on disk
+    const before = fakeAgents(env.fakeState).map((a) => a.sessionId as string);
+    const proj = path.join(process.env.CLAUDE_CONFIG_DIR!, 'projects', '-repo');
+    fs.mkdirSync(proj, { recursive: true });
+    for (const id of before) fs.writeFileSync(path.join(proj, `${id}.jsonl`), '{}\n');
+    fs.writeFileSync(path.join(env.fakeState, 'agents.json'), '[]');
+
+    d = drive(repo);
+    await d.waitFor(/resumed main's last conversation and 1 fork/);
+    await d.waitFor(/survive-me[\s\S]*fake claude session|fake claude session[\s\S]*survive-me/);
+    // the fork itself was made with --resume <main> --fork-session; continuing never copies
+    const resumes = fakeCalls(env.fakeState).filter(
+      (c) => c.argv.includes('--resume') && !c.argv.includes('--fork-session'),
+    );
+    expect(resumes.map((c) => c.argv[c.argv.indexOf('--resume') + 1]).sort()).toEqual(
+      [...before].sort(),
+    );
+    expect(fakeAgents(env.fakeState)).toHaveLength(2);
+
+    // a single fork from the command line
+    const repoId = repoContext(repo).repoId;
+    const fork = listBranches(repoId).find((b) => b.name === 'survive-me')!;
+    fs.writeFileSync(
+      path.join(env.fakeState, 'agents.json'),
+      JSON.stringify(fakeAgents(env.fakeState).filter((a) => a.sessionId !== fork.sessionId)),
+    );
+    const out = execFileSync(process.execPath, [CLI, 'resume', 'survive-me'], {
+      cwd: repo,
+      encoding: 'utf8',
+    });
+    expect(out).toContain('resumed survive-me');
+    expect(() =>
+      execFileSync(process.execPath, [CLI, 'resume', 'survive-me'], { cwd: repo, stdio: 'pipe' }),
+    ).toThrow(/still running/);
+  });
 });

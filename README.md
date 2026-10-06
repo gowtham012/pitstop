@@ -130,21 +130,23 @@ Requirements:
 
 Click a button in the bottom bar, or press one key. Every action needs at most two keys:
 
-| Action                                                                           | One key | Mac | or `ctrl+\` then |
-| -------------------------------------------------------------------------------- | ------- | --- | ---------------- |
-| **Fork** the focused session into a new pane (Tab in the prompt cycles presets)  | F2      | ⌥F  | `f`              |
-| Fork into the **background** (no pane)                                           |         | ⌥B  | `b`              |
-| **Merge** a fork back                                                            | F3      | ⌥M  | `m`              |
-| Open the fork's **diff** in a pane                                               | F4      | ⌥D  | `d`              |
-| Branch **tree** with state, files, cost and overlaps (`c` clears finished forks) | F5      | ⌥T  | `t`              |
-| **Pull** main's latest commits into the fork                                     | F6      | ⌥P  | `p`              |
-| Write a shareable **report**                                                     | F7      | ⌥R  | `e`              |
-| **Delete** a fork (`c` deletes its conversation too)                             | F8      | ⌥X  | `x`              |
-| **Zoom** the focused pane and back                                               | F9      | ⌥Z  | `z`              |
-| **Help**                                                                         | F1      | ⌥/  | `?`              |
-| **Quit**. Claude sessions keep running; `pit` brings the same panes back         | F10     |     | `q`              |
+| Action                                                                              | One key | Mac | or `ctrl+\` then |
+| ----------------------------------------------------------------------------------- | ------- | --- | ---------------- |
+| **Fork** the focused session into a new pane (Tab in the prompt cycles presets)     | F2      | ⌥F  | `f`              |
+| Fork into the **background** (no pane)                                              |         | ⌥B  | `b`              |
+| **Merge** a fork back                                                               | F3      | ⌥M  | `m`              |
+| Open the fork's **diff** in a pane                                                  | F4      | ⌥D  | `d`              |
+| Branch **tree** with state, files, cost and overlaps (`c` clears finished forks)    | F5      | ⌥T  | `t`              |
+| **Pull** main's latest commits into the fork                                        | F6      | ⌥P  | `p`              |
+| Write a shareable **report**                                                        | F7      | ⌥R  | `e`              |
+| **Delete** a fork (`c` deletes its conversation too)                                | F8      | ⌥X  | `x`              |
+| **Zoom** the focused pane and back                                                  | F9      | ⌥Z  | `z`              |
+| **Help**                                                                            | F1      | ⌥/  | `?`              |
+| **Resume** a stopped pane, or re-attach a detached one (or click its bottom border) |         |     | `r`              |
+| **Quit**. Claude sessions keep running; `pit` brings the same panes back            | F10     |     | `q`              |
 
 - **Exit:** press F10 twice, or click **Quit** and press Enter.
+- **Resume:** quitting never stops your sessions, and `pit` reopens the same panes. If they did stop (a reboot, a crash), `pit` continues main's last conversation and every fork that had a pane, each in its own worktree. `pit resume <name>` continues one fork, and `pit --new` starts a fresh main instead.
 - **Switch panes:** click a pane or a tab in the bottom bar, or `ctrl+\` `←` `→` / `1`–`9`.
 - **MacBook:** hold `fn` with the F key, unless your keyboard is set to use F1, F2… as standard keys. The ⌥ keys work in Terminal and iTerm2 with their default settings.
 - Turn off the one-step keys with `"shortKeys": false`. `ctrl+\` is never bound by Claude Code; pressing it twice sends it to the pane, and `prefixKey` changes it.

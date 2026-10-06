@@ -13,6 +13,7 @@ import {
   saveBranch,
   upsertSession,
   type BranchRecord,
+  type SessionRecord,
 } from '../branches.js';
 import { loadConfig } from '../core/config.js';
 import { repoContext } from '../core/git.js';
@@ -96,6 +97,19 @@ function deliver(event: string, sessionId: string, extra?: string): HookOutput {
   return { exitCode: 0, stdout: json(event, { additionalContext: parts.join('\n\n') }) };
 }
 
+/**
+ * Role for a session pitstop hasn't seen yet. A main session whose conversation moved to a
+ * new id must stay main (resume looks for main's latest conversation), so trust PITSTOP_ROLE.
+ */
+function newSessionRole(cwd: string | undefined): Partial<SessionRecord> {
+  if (process.env.PITSTOP_ROLE !== 'main') return { role: 'fork' };
+  try {
+    return { role: 'main', repoId: repoContext(cwd ?? process.cwd()).repoId };
+  } catch {
+    return { role: 'main' };
+  }
+}
+
 export function handleHook(event: string, input: HookInput): HookOutput {
   const sid = input.session_id;
   switch (event) {
@@ -110,7 +124,7 @@ export function handleHook(event: string, input: HookInput): HookOutput {
         cwd: input.cwd,
         transcriptPath: input.transcript_path,
         startedAt: new Date().toISOString(),
-        ...(loadSession(sid) ? {} : { role: 'fork' as const }),
+        ...(loadSession(sid) ? {} : newSessionRole(input.cwd)),
       });
       const branch = resolveBranch(input, false);
       const reminder = branch

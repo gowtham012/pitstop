@@ -24,6 +24,7 @@ import { cloudForkReady, messageCloudFork, parseCloudSession, remoteHead } from 
 import { recordAgentConsent } from '../fork/common.js';
 import { ConfirmationNeeded, forkSession } from '../fork/fork.js';
 import { adoptMainSession, ensureMainSession, type MainSession } from '../fork/main.js';
+import { resumeFork, stoppedForks } from '../fork/resume.js';
 import { sendInbox } from '../inbox.js';
 import {
   clearHistory,
@@ -48,6 +49,8 @@ export interface AppOptions {
   prompt?: string;
   /** Adopt this existing session as main instead of starting one. */
   mainSessionId?: string;
+  /** Start a new main conversation instead of continuing a stopped one. */
+  fresh?: boolean;
   stdin?: NodeJS.ReadStream;
   stdout?: NodeJS.WriteStream;
 }
@@ -104,6 +107,7 @@ const HELP = [
   '  delete       F8      ⌥X         x',
   '  zoom         F9      ⌥Z         z',
   '  help         F1      ⌥/         ?',
+  "  resume                          r   (or click a stopped pane's bottom border)",
   '  quit         F10                q   (F10 twice; sessions keep running)',
   '',
   'Switch panes: click a pane or a tab, or ctrl+\\ ← → / 1-9.',
@@ -200,9 +204,31 @@ export class App {
         throw new Error(`No running session ${this.opts.mainSessionId} (see \`claude agents\`)`);
       this.main = adoptMainSession(this.opts.cwd, agent);
     } else {
-      this.main = await ensureMainSession(this.opts.cwd, this.opts.claudeArgs, this.opts.prompt);
+      this.main = await ensureMainSession(this.opts.cwd, this.opts.claudeArgs, this.opts.prompt, {
+        fresh: this.opts.fresh,
+      });
     }
     await this.refresh();
+    // After a reboot or a crash, bring back the forks that had panes.
+    const resumed: string[] = [];
+    const failed: string[] = [];
+    const stopped = stoppedForks(this.branches, [...this.agents.values()]);
+    if (stopped.length) {
+      this.stdout.write(
+        `pitstop: resuming ${stopped.length} fork${stopped.length === 1 ? '' : 's'}…\n`,
+      );
+      for (const b of stopped) {
+        try {
+          await resumeFork(this.ctx.top, b.name);
+          resumed.push(b.name);
+        } catch (err) {
+          failed.push(
+            `${b.name} (${err instanceof Error ? err.message.split('\n')[0] : String(err)})`,
+          );
+        }
+      }
+      await this.refresh();
+    }
 
     this.stdout.write('\x1b[?1049h\x1b[?25l\x1b[?1000h\x1b[?1006h\x1b[?2004h');
     this.stdin.setRawMode?.(true);
@@ -227,6 +253,20 @@ export class App {
         STYLE.warn,
         12000,
       );
+    } else if (this.main.resumeError) {
+      this.flash(
+        `couldn't continue main's last conversation (${this.main.resumeError}); started a new one`,
+        STYLE.warn,
+        12000,
+      );
+    } else if (failed.length) {
+      this.flash(`couldn't resume ${failed.join(', ')}`, STYLE.warn, 12000);
+    } else if (this.main.resumed || resumed.length) {
+      const what = [
+        ...(this.main.resumed ? ["main's last conversation"] : []),
+        ...(resumed.length ? [`${resumed.length} fork${resumed.length === 1 ? '' : 's'}`] : []),
+      ];
+      this.flash(`resumed ${what.join(' and ')}`, STYLE.ok, 10000);
     } else {
       const notice = takeNotice();
       if (notice) this.flash(notice, STYLE.ok, 12000);
@@ -339,6 +379,53 @@ export class App {
     this.order.push(id);
     this.focus = id;
     this.zoom = undefined;
+    this.layoutAndRender();
+  }
+
+  /** Continue a stopped session and put it back in the pane it had. */
+  private resumePane(id: string): void {
+    void this.op('resuming…', async () => {
+      let next: { sessionId: string; shortId?: string };
+      let label: string;
+      if (id === this.mainPaneId) {
+        const m = await ensureMainSession(this.opts.cwd, this.opts.claudeArgs);
+        if (m.resumeError) throw new Error(`couldn't resume main: ${m.resumeError}`);
+        this.main = m;
+        this.mainPaneId = m.sessionId;
+        next = m;
+        label = 'main';
+      } else {
+        const b = this.branchByPane(id);
+        if (!b) throw new Error('this pane has no fork to resume');
+        const nb = await resumeFork(this.ctx.top, b.name);
+        next = { sessionId: nb.sessionId!, shortId: nb.shortId };
+        label = b.name;
+      }
+      await this.refresh();
+      this.swapPane(id, next.sessionId, next.shortId);
+      this.flash(`resumed ${label}`, STYLE.ok);
+    });
+  }
+
+  /** Point a pane at a (possibly new) session id, keeping its place and focus. */
+  private swapPane(oldId: string, newId: string, shortId?: string): void {
+    if (oldId === newId) {
+      const pane = this.panes.get(oldId);
+      if (pane && pane.kind === 'session') {
+        pane.setCommand(claudeBin(), ['attach', shortId ?? newId.slice(0, 8)]);
+        pane.respawn();
+      }
+      return this.layoutAndRender();
+    }
+    const at = this.order.indexOf(oldId);
+    const focused = this.focus === oldId;
+    this.panes.get(oldId)?.dispose();
+    this.panes.delete(oldId);
+    this.order = this.order.filter((o) => o !== oldId);
+    this.addSessionPane(newId, shortId);
+    this.order = this.order.filter((o) => o !== newId);
+    this.order.splice(at < 0 ? this.order.length : at, 0, newId);
+    if (focused) this.focus = newId;
     this.layoutAndRender();
   }
 
@@ -591,6 +678,13 @@ export class App {
       return;
     }
     const isWheel = button >= 64 && button < 128;
+    // Clicking the notice in a stopped or detached pane's bottom border brings it back.
+    const pane0 = this.panes.get(slot.id);
+    if (!release && !isWheel && y === slot.footer.y && pane0?.kind === 'session' && pane0.exited) {
+      this.focus = slot.id;
+      this.command('reattach');
+      return this.layoutAndRender();
+    }
     if (!release && !isWheel && slot.id !== this.focus) {
       this.focus = slot.id;
       this.layoutAndRender();
@@ -691,6 +785,9 @@ export class App {
             10000,
           );
         }
+        // The session itself is gone (a reboot, a crash): continue its conversation.
+        if (pane?.kind === 'session' && !this.agents.has(this.focus))
+          return this.resumePane(this.focus);
         if (pane?.kind === 'session' || pane?.kind === 'agent') pane.respawn();
         return this.flash(pane?.kind === 'agent' ? 'resumed the agent' : 're-attached', STYLE.ok);
       }
@@ -1143,7 +1240,9 @@ export class App {
 
     const notice =
       pane?.exited && pane.kind === 'session'
-        ? 'detached · ctrl+\\ r to re-attach'
+        ? this.agents.has(id)
+          ? 'detached · click or ctrl+\\ r to re-attach'
+          : 'stopped · click or ctrl+\\ r to resume'
         : pane?.inAgentView
           ? 'agent view · Enter returns, or ctrl+\\ r'
           : this.zoom === id
