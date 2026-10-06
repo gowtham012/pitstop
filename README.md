@@ -142,8 +142,9 @@ Click a button in the bottom bar, or press one key. Every action needs at most t
 | **Delete** a fork (`c` deletes its conversation too)                             | F8      | ⌥X  | `x`              |
 | **Zoom** the focused pane and back                                               | F9      | ⌥Z  | `z`              |
 | **Help**                                                                         | F1      | ⌥/  | `?`              |
-| **Quit**. Claude sessions keep running; `pit` brings the same panes back         |         |     | `q`              |
+| **Quit**. Claude sessions keep running; `pit` brings the same panes back         | F10     |     | `q`              |
 
+- **Exit:** press F10 twice, or click **Quit** and press Enter.
 - **Switch panes:** click a pane or a tab in the bottom bar, or `ctrl+\` `←` `→` / `1`–`9`.
 - **MacBook:** hold `fn` with the F key, unless your keyboard is set to use F1, F2… as standard keys. The ⌥ keys work in Terminal and iTerm2 with their default settings.
 - Turn off the one-step keys with `"shortKeys": false`. `ctrl+\` is never bound by Claude Code; pressing it twice sends it to the pane, and `prefixKey` changes it.

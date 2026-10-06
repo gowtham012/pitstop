@@ -48,7 +48,15 @@ export interface AppOptions {
 
 type Overlay =
   | { kind: 'text'; title: string; lines: string[]; keys?: OverlayKey[] }
-  | { kind: 'confirm'; title: string; lines: string[]; onYes: () => void; alt?: OverlayKey }
+  | {
+      kind: 'confirm';
+      title: string;
+      lines: string[];
+      onYes: () => void;
+      alt?: OverlayKey;
+      /** More keys that mean yes, e.g. F10 again in the quit popup. */
+      yesKeys?: string[];
+    }
   | {
       kind: 'pick';
       title: string;
@@ -90,7 +98,7 @@ const HELP = [
   '  delete       F8      ⌥X         x',
   '  zoom         F9      ⌥Z         z',
   '  help         F1      ⌥/         ?',
-  '  quit                            q   (sessions keep running)',
+  '  quit         F10                q   (F10 twice; sessions keep running)',
   '',
   'Switch panes: click a pane or a tab, or ctrl+\\ ← → / 1-9.',
   'In the fork prompt, Tab cycles presets: hotfix, explore, cloud, codex, gemini, …',
@@ -98,13 +106,14 @@ const HELP = [
 ];
 
 /** Bottom-bar buttons. */
-const BUTTONS: { label: string; key: string; command: Command }[] = [
+const BUTTONS: { label: string; key: string; command: Command; style?: string }[] = [
   { label: '+ Fork', key: 'F2', command: 'fork' },
   { label: 'Merge', key: 'F3', command: 'merge' },
   { label: 'Diff', key: 'F4', command: 'diff' },
   { label: 'Tree', key: 'F5', command: 'tree' },
   { label: 'Delete', key: 'F8', command: 'delete' },
   { label: '?', key: 'F1', command: 'help' },
+  { label: 'Quit', key: 'F10', command: 'quit', style: STYLE.buttonQuit },
 ];
 
 function stateStyle(state: string): string {
@@ -601,7 +610,7 @@ export class App {
   private overlayKey(data: string): void {
     const o = this.overlay!;
     if (o.kind === 'confirm') {
-      if (/^[yY]/.test(data)) {
+      if (/^[yY]/.test(data) || o.yesKeys?.includes(data)) {
         this.overlay = undefined;
         o.onYes();
       } else if (o.alt && data === o.alt.key) {
@@ -709,6 +718,7 @@ export class App {
               : []),
           ],
           onYes: () => void this.stop(),
+          yesKeys: ['\r', '\x1b[21~'],
         };
         return;
       }
@@ -1207,14 +1217,14 @@ export class App {
     const minMiddle = 24;
     if (width(labels) > r.w - x - minMiddle) labels = plan(false, BUTTONS);
     if (width(labels) > r.w - x - minMiddle) {
-      shown = BUTTONS.filter((bt) => ['fork', 'merge', 'help'].includes(bt.command));
+      shown = BUTTONS.filter((bt) => ['fork', 'merge', 'help', 'quit'].includes(bt.command));
       labels = plan(false, shown);
     }
     let bx = r.w - width(labels);
     if (bx - x >= 8) {
       labels.forEach((label, i) => {
         const x0 = bx;
-        bx = screen.text(bx, r.y, label, STYLE.button);
+        bx = screen.text(bx, r.y, label, shown[i]!.style ?? STYLE.button);
         this.statusHits.push({ x0, x1: bx, command: shown[i]!.command });
         bx += 1;
       });
@@ -1255,7 +1265,11 @@ export class App {
     const extra = (k: OverlayKey) => `${k.key} ${k.label}`;
     const footer =
       o.kind === 'confirm'
-        ? ['y yes', ...(o.alt ? [extra(o.alt)] : []), 'n no'].join(' · ')
+        ? [
+            o.yesKeys?.includes('\x1b[21~') ? 'y / Enter / F10 yes' : 'y yes',
+            ...(o.alt ? [extra(o.alt)] : []),
+            'n no',
+          ].join(' · ')
         : o.kind === 'pick'
           ? '1-9 pick · esc cancel'
           : o.keys?.length

@@ -366,4 +366,30 @@ describe('pit split-pane UI', () => {
     d.send('click fork\r');
     await d.waitFor(/2 . click-fork/);
   });
+
+  it('quits with F10 twice, or the Quit button and Enter', async () => {
+    d = drive(repo);
+    await d.waitFor(/fake claude session/);
+    await d.waitFor(/Quit F10/);
+    d.send('\x1b[21~');
+    await d.waitFor(/Quit pit\?/);
+    await d.waitFor(/y \/ Enter \/ F10 yes/);
+    d.send('\x1b[21~');
+    let start = Date.now();
+    while (!d.exited() && Date.now() - start < 5000) await new Promise((r) => setTimeout(r, 100));
+    expect(d.exited()).toBe(true);
+    expect(fakeAgents(env.fakeState)).toHaveLength(1); // main keeps running
+
+    d = drive(repo);
+    await d.waitFor(/Quit F10/);
+    const lines = d.screen().split('\n');
+    const y = lines.length - 1;
+    const x = lines[y]!.indexOf('Quit F10');
+    d.send(`\x1b[<0;${x + 2};${y + 1}M\x1b[<0;${x + 2};${y + 1}m`);
+    await d.waitFor(/Quit pit\?/);
+    d.send('\r');
+    start = Date.now();
+    while (!d.exited() && Date.now() - start < 5000) await new Promise((r) => setTimeout(r, 100));
+    expect(d.exited()).toBe(true);
+  });
 });

@@ -169,7 +169,7 @@ Live forks are never touched.
 
 ## 8. Quit and come back later
 
-Press `ctrl+\` `q`, then `y`.
+Press **F10** twice, or click **Quit** in the bottom bar and press Enter (`ctrl+\` `q` then `y` also works).
 
 - Claude sessions (main and forks) **keep running** in the background.
 - Run `pit` again in the same repo to get the same panes back.

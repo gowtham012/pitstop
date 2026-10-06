@@ -69,6 +69,7 @@ export const SHORT_KEYS: [string, Command][] = [
   ['\x1b[18~', 'report'],
   ['\x1b[19~', 'delete'],
   ['\x1b[20~', 'zoom'],
+  ['\x1b[21~', 'quit'], // F10
   ['ƒ', 'fork'], // ⌥F
   ['∫', 'bg-fork'], // ⌥B
   ['µ', 'merge'], // ⌥M

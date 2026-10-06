@@ -126,6 +126,7 @@ describe('short keys', () => {
     expect(r.feed('\x1bOQ')).toEqual([{ type: 'command', command: 'fork' }]);
     expect(r.feed('\x1b[12~')).toEqual([{ type: 'command', command: 'fork' }]);
     expect(r.feed('\x1b[19~')).toEqual([{ type: 'command', command: 'delete' }]);
+    expect(r.feed('\x1b[21~')).toEqual([{ type: 'command', command: 'quit' }]);
     expect(r.feed('abƒ')).toEqual([
       { type: 'forward', data: 'ab' },
       { type: 'command', command: 'fork' },
