@@ -207,6 +207,21 @@ describe('security hardening', () => {
     const trusted = sanitizeRepoConfig({ test: 'npm test', presets: { p: { permissionMode: 'dontAsk' } } }, true);
     expect(trusted.cfg.test).toBe('npm test');
     expect(trusted.cfg.presets!.p!.permissionMode).toBeUndefined();
+    const modes = sanitizeRepoConfig(
+      { presets: { a: { permissionMode: 'auto' }, b: { permissionMode: 'weird' as never }, c: { permissionMode: 'acceptEdits' } } },
+      true,
+    ).cfg.presets!;
+    expect([modes.a!.permissionMode, modes.b!.permissionMode, modes.c!.permissionMode]).toEqual([undefined, undefined, 'acceptEdits']);
+  });
+
+  it('denies branch deletes and moves in the main checkout but allows listing', () => {
+    const noWt = { repoTop: '/repo', cwd: '/repo' };
+    for (const command of ['git branch -D x', 'git branch --delete x', 'git branch -m a b', 'git branch -f main HEAD~1', 'git update-ref -d refs/heads/x']) {
+      expect(guardDecision({ ...noWt, toolName: 'Bash', toolInput: { command } }).deny).toBe(true);
+    }
+    for (const command of ['git branch', 'git branch -a', 'git branch --list', 'git log --oneline']) {
+      expect(guardDecision({ ...noWt, toolName: 'Bash', toolInput: { command } }).deny).toBe(false);
+    }
   });
 
   it('escapes fork-controlled text before it reaches the parent', () => {

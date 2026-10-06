@@ -19,7 +19,7 @@ const FILE_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
 
 /** git subcommands that change files, the index, refs or the remote. */
 const MUTATING_GIT =
-  /\bgit\b[^;&|\n]*?\b(checkout|switch|reset|stash|commit|merge|rebase|restore|clean|add|rm|mv|push|pull|cherry-pick|revert|apply|am|tag|worktree)\b/;
+  /\bgit\b[^;&|\n]*?\b(?:checkout|switch|reset|stash|commit|merge|rebase|restore|clean|add|rm|mv|push|pull|cherry-pick|revert|apply|am|tag|worktree|update-ref|branch\s+(?:\S+\s+)*?(?:-[a-zA-Z]*[dDmMcCf][a-zA-Z]*|--delete|--move|--copy|--force)\b)/;
 
 const ALLOW: GuardDecision = { deny: false };
 

@@ -78,8 +78,12 @@ export function mergeConfig(base: PitConfig, over: PartialConfig | undefined): P
   };
 }
 
-/** Permission modes a repository's own .pitstop.json may not grant: only the user's config can. */
-const ELEVATED_MODES: PermissionMode[] = ['bypassPermissions', 'dontAsk'];
+/**
+ * The only permission modes a repository's own .pitstop.json may set. Anything
+ * else (bypassPermissions, dontAsk, auto, unknown values) must come from the
+ * user's ~/.pitstop/config.json.
+ */
+const REPO_ALLOWED_MODES: string[] = ['plan', 'manual', 'acceptEdits'];
 
 export interface RepoCommands {
   test?: string;
@@ -129,7 +133,7 @@ export function sanitizeRepoConfig(repoCfg: PartialConfig, trusted: boolean): { 
   if (cfg.presets) {
     const presets: Record<string, Preset> = {};
     for (const [name, p] of Object.entries(cfg.presets)) {
-      if (p.permissionMode && ELEVATED_MODES.includes(p.permissionMode)) {
+      if (p.permissionMode && !REPO_ALLOWED_MODES.includes(p.permissionMode)) {
         dropped.push(`permissionMode "${p.permissionMode}" in preset "${name}"`);
         presets[name] = { ...p, permissionMode: undefined };
       } else presets[name] = p;
