@@ -11,7 +11,13 @@ import {
 } from '../branches.js';
 import { deleteTranscript } from '../claude/locate.js';
 import { sessionCost } from '../status.js';
-import { isBusy, listAgentsAsync, removeSession, stopSession } from '../claude/agents.js';
+import {
+  currentSessionId,
+  isBusy,
+  listAgentsAsync,
+  removeSession,
+  stopSession,
+} from '../claude/agents.js';
 import { loadConfig } from '../core/config.js';
 import { run, runSync } from '../core/exec.js';
 import {
@@ -259,7 +265,7 @@ export async function mergeBranch(
 
     if (strategy !== 'nothing') {
       sendInbox({
-        to: b.parentSessionId,
+        to: await currentSessionId(b.parentSessionId),
         from: b.name,
         kind: strategy === 'commit' ? 'merged' : strategy === 'apply' ? 'applied' : 'deferred',
         text: noteText(b, strategy, files, reason),

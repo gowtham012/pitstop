@@ -8,7 +8,7 @@ import {
   type BranchRecord,
   type SessionRecord,
 } from './branches.js';
-import { claudeBin, listAgentsAsync, type AgentInfo } from './claude/agents.js';
+import { claudeBin, findAgent, listAgentsAsync, type AgentInfo } from './claude/agents.js';
 import {
   loadConfig,
   readRepoConfig,
@@ -78,7 +78,7 @@ async function findMainSession(
     (s) => s.role === 'main' && s.repoId === repoId,
   );
   for (const m of mains) {
-    const a = agents.find((x) => x.sessionId === m.sessionId);
+    const a = findAgent(agents, m.sessionId);
     if (a) return a;
   }
   const forkIds = new Set(listBranches(repoId).map((b) => b.sessionId));

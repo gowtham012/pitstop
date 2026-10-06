@@ -8,7 +8,13 @@ import {
   updateBranch,
   type BranchRecord,
 } from '../branches.js';
-import { claudeBin, listAgentsAsync, stopSession, type AgentInfo } from '../claude/agents.js';
+import {
+  claudeBin,
+  findAgent,
+  listAgentsAsync,
+  stopSession,
+  type AgentInfo,
+} from '../claude/agents.js';
 import { loadConfig, parseTaskInput, prefixByte, type PitConfig } from '../core/config.js';
 import { runSync } from '../core/exec.js';
 import { repoContext, type RepoContext } from '../core/git.js';
@@ -430,6 +436,9 @@ export class App {
   private async refresh(): Promise<void> {
     const agents = await listAgentsAsync();
     this.agents = new Map(agents.map((a) => [a.sessionId, a]));
+    // Main is keyed by the id it started with; its conversation id can change since.
+    const main = findAgent(agents, this.main.sessionId);
+    if (main) this.agents.set(this.main.sessionId, main);
     this.branches = listBranches(this.ctx.repoId);
     if (Date.now() - this.lastCloudCheck > 30_000) {
       this.lastCloudCheck = Date.now();
@@ -489,7 +498,9 @@ export class App {
         this.notified.add(key);
         for (const s of o.sessions) {
           const to =
-            s === 'main' ? this.main.sessionId : this.branches.find((b) => b.name === s)?.sessionId;
+            s === 'main'
+              ? this.agents.get(this.main.sessionId)?.sessionId
+              : this.branches.find((b) => b.name === s)?.sessionId;
           if (!to) continue;
           sendInbox({
             to,

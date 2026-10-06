@@ -1,5 +1,5 @@
 import { upsertSession, type SessionRecord } from '../branches.js';
-import { listAgentsAsync, startBackground, type AgentInfo } from '../claude/agents.js';
+import { findAgent, listAgentsAsync, startBackground, type AgentInfo } from '../claude/agents.js';
 import { sessionSettings } from '../claude/settings.js';
 import { repoContext } from '../core/git.js';
 import { sessionsDir, slugify } from '../core/paths.js';
@@ -31,13 +31,11 @@ export async function ensureMainSession(
   const known = listJson<SessionRecord>(sessionsDir()).filter(
     (s) => s.role === 'main' && s.repoId === ctx.repoId,
   );
-  const alive = known
-    .map((s) => agents.find((a: AgentInfo) => a.sessionId === s.sessionId))
-    .filter((a): a is AgentInfo => !!a);
-  const existing = alive[0];
-  if (existing && !prompt && !claudeArgs.length) {
+  const record = known.find((s) => findAgent(agents, s.sessionId));
+  const existing = record && findAgent(agents, record.sessionId);
+  if (record && existing && !prompt && !claudeArgs.length) {
     return {
-      sessionId: existing.sessionId,
+      sessionId: record.sessionId,
       shortId: existing.id,
       name: existing.name ?? mainSessionName(ctx.name),
       reused: true,
