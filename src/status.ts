@@ -9,12 +9,17 @@ import {
 } from './claude/transcript.js';
 import type { Overlap } from './radar.js';
 
-export type SessionState = 'working' | 'needs input' | 'idle' | 'stopped' | BranchRecord['state'];
+export type SessionState =
+  'working' | 'needs input' | 'idle' | 'stopped' | 'ready' | BranchRecord['state'];
 
 /** One word for where a session is, combining Claude Code's live status with pitstop's branch state. */
 export function sessionState(agent: AgentInfo | undefined, branch?: BranchRecord): SessionState {
   if (branch && !['starting', 'running', 'idle', 'done'].includes(branch.state))
     return branch.state;
+  if (branch?.kind === 'cloud') return branch.state === 'done' ? 'ready' : 'working';
+  if (branch?.kind === 'agent') {
+    return branch.state === 'idle' ? 'stopped' : branch.state === 'done' ? 'idle' : 'running';
+  }
   if (!agent) return branch?.state === 'starting' ? 'starting' : 'stopped';
   if (agent.status === 'busy') return 'working';
   if (agent.status === 'waiting') return 'needs input';
@@ -32,6 +37,7 @@ export function stateGlyph(s: SessionState): string {
     case 'needs input':
       return '?';
     case 'merged':
+    case 'ready':
       return '✓';
     case 'failed':
       return '✗';
@@ -74,6 +80,13 @@ export interface TreeInput {
   all?: boolean;
 }
 
+/** Where a fork runs, for the tree: pane, bg, cloud, or the agent's name. */
+export function kindLabel(b: BranchRecord): string {
+  if (b.kind === 'cloud') return 'cloud';
+  if (b.kind === 'agent') return b.agent ?? 'agent';
+  return b.mode;
+}
+
 function pad(s: string, n: number): string {
   return s.length >= n ? s : s + ' '.repeat(n - s.length);
 }
@@ -102,7 +115,7 @@ export function treeLines(t: TreeInput): string[] {
       const cost = b.sessionId ? t.costs?.get(b.sessionId) : undefined;
       const flags = t.overlaps?.some((o) => o.sessions.includes(b.name)) ? '  !! overlap' : '';
       lines.push(
-        `${prefix}${last ? '└─ ' : '├─ '}${pad(b.name, 18)} ${pad(`${stateGlyph(state)} ${state}`, 14)} ${pad(b.mode, 4)} ${pad(b.forkMethod, 6)}` +
+        `${prefix}${last ? '└─ ' : '├─ '}${pad(b.name, 18)} ${pad(`${stateGlyph(state)} ${state}`, 14)} ${pad(kindLabel(b), 7)} ${pad(b.forkMethod, 7)}` +
           `${files ? ` ${files.length} file${files.length === 1 ? '' : 's'}` : ''}${cost ? `  $${cost.usd.toFixed(2)} est` : ''}${flags}`,
       );
       walk(b.name, `${prefix}${last ? '   ' : '│  '}`);

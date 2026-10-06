@@ -38,7 +38,14 @@ describe('config', () => {
 
   it('merges presets by key and keeps nested defaults', () => {
     const cfg = mergeConfig(DEFAULT_CONFIG, { presets: { cheap: { model: 'haiku' } }, merge: {} });
-    expect(Object.keys(cfg.presets)).toEqual(['hotfix', 'explore', 'cheap']);
+    expect(Object.keys(cfg.presets)).toEqual([
+      'hotfix',
+      'explore',
+      'cloud',
+      'codex',
+      'gemini',
+      'cheap',
+    ]);
     expect(cfg.merge.mode).toBe('local');
   });
 });

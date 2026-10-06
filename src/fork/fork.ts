@@ -1,110 +1,36 @@
 import crypto from 'node:crypto';
 import path from 'node:path';
-import {
-  branchForSession,
-  listBranches,
-  LIVE_STATES,
-  loadSession,
-  nextPortSlot,
-  saveBranch,
-  uniqueName,
-  upsertSession,
-  type BranchRecord,
-} from '../branches.js';
-import { isBusy, listAgentsAsync, startBackground, type AgentInfo } from '../claude/agents.js';
+import { saveBranch, upsertSession, type BranchRecord } from '../branches.js';
+import { isBusy, startBackground } from '../claude/agents.js';
 import { findTranscript } from '../claude/locate.js';
 import { sessionSettings } from '../claude/settings.js';
 import { readTranscriptSnapshot, sealTranscript, writeTranscript } from '../claude/transcript.js';
 import { loadConfig } from '../core/config.js';
-import { branchExists, repoContext } from '../core/git.js';
-import { branchesDir, slugify } from '../core/paths.js';
-import { dropSnapshotRef, snapshotWorkingTree } from '../core/snapshot.js';
-import { claimName, releaseName } from '../core/store.js';
+import { repoContext } from '../core/git.js';
+import { forkAgent } from './agent.js';
+import { forkCloud } from './cloud.js';
+import { abortFork, ForkError, prepareFork, requestKind, type ForkRequest } from './common.js';
 import { forkPrompt } from './prompt.js';
 
-export class ForkError extends Error {}
-
-export interface ForkRequest {
-  /** Any directory inside the repository. */
-  cwd: string;
-  parentSessionId: string;
-  task: string;
-  preset?: string;
-  mode: 'pane' | 'bg';
-  name?: string;
-  /** 'auto' (default): native when the parent is idle, sealed copy when it is mid-turn. */
-  method?: 'auto' | 'native' | 'sealed';
-}
-
-export function forkSessionName(repoName: string, name: string): string {
-  return `${slugify(repoName, 20)}-${name}`;
-}
+export { ConfirmationNeeded, ForkError, forkSessionName, type ForkRequest } from './common.js';
 
 /**
- * Fork a running session into a new background session with the full
- * conversation, its own port slot and (on first edit) its own worktree built
- * from a snapshot of the parent's uncommitted work.
+ * Fork a running session. Claude forks get the full conversation in a new
+ * background session; cloud and agent forks get a summary of it (see
+ * fork/cloud.ts and fork/agent.ts). Every fork gets its own port slot and a
+ * worktree built from a snapshot of the parent's uncommitted work.
  */
 export async function forkSession(req: ForkRequest): Promise<BranchRecord> {
-  const ctx = repoContext(req.cwd);
-  const cfg = loadConfig(ctx.top);
-  const agents = await listAgentsAsync();
-  const parent: AgentInfo | undefined = agents.find((a) => a.sessionId === req.parentSessionId);
-  const branches = listBranches(ctx.repoId);
-  const live = branches.filter((b) => LIVE_STATES.includes(b.state) && b.state !== 'deferred');
-  if (live.length + 1 >= cfg.maxSessions) {
-    throw new ForkError(
-      `Already running ${live.length + 1} sessions (limit ${cfg.maxSessions}). Merge or discard a fork, or raise maxSessions in .pitstop.json.`,
-    );
-  }
-  const preset = req.preset ? cfg.presets[req.preset] : undefined;
-  if (req.preset && !preset) throw new ForkError(`Unknown preset "${req.preset}"`);
+  const kind = requestKind(req, loadConfig(repoContext(req.cwd).top));
+  if (kind === 'cloud') return forkCloud(req);
+  if (kind === 'agent') return forkAgent(req);
+  return forkClaude(req);
+}
 
-  const parentBranch = branchForSession(req.parentSessionId);
-  const parentRecord = loadSession(req.parentSessionId);
-  // Where the parent is editing: its own worktree for a fork, else the main checkout.
-  const parentDir = parentBranch?.worktree ?? ctx.top;
-  const parentName = parentBranch?.sessionName ?? parentRecord?.name ?? parent?.name ?? 'main';
-
-  const taken = new Set(branches.map((b) => b.name));
-  const slug = slugify(req.name ?? req.task);
-  let name = uniqueName(slug, taken);
-  while (
-    branchExists(ctx.top, `pit/${name}`) ||
-    !claimName(path.join(branchesDir(ctx.repoId), '.names'), name)
-  ) {
-    taken.add(name);
-    name = uniqueName(slug, taken);
-  }
-
-  const snap = snapshotWorkingTree(parentDir, name);
-  const portSlot = nextPortSlot(branches);
-  const now = new Date().toISOString();
-  let branch: BranchRecord = saveBranch({
-    name,
-    repoId: ctx.repoId,
-    repoTop: ctx.top,
-    task: req.task,
-    preset: req.preset,
-    mode: req.mode,
-    parentSessionId: req.parentSessionId,
-    parentSessionName: parentName,
-    parentBranch: parentBranch?.name,
-    sessionName: forkSessionName(ctx.name, name),
-    forkMethod: 'native',
-    snapshotCommit: snap.commit,
-    snapshotRef: snap.ref,
-    baseCommit: snap.base,
-    gitBranch: `pit/${name}`,
-    portSlot,
-    portOffset: portSlot * cfg.portStep,
-    state: 'starting',
-    budgetUsd: preset?.budgetUsd,
-    testGate: preset?.testGate ?? cfg.testGate,
-    createdAt: now,
-    updatedAt: now,
-  });
-
+async function forkClaude(req: ForkRequest): Promise<BranchRecord> {
+  const p = await prepareFork(req);
+  const { ctx, cfg, preset, parent, parentRecord, parentDir, parentName } = p;
+  let branch = p.branch;
   try {
     const transcript = findTranscript(req.parentSessionId);
     const method = req.method ?? 'auto';
@@ -119,12 +45,12 @@ export async function forkSession(req: ForkRequest): Promise<BranchRecord> {
       const result = sealTranscript(readTranscriptSnapshot(transcript), newId);
       writeTranscript(path.join(path.dirname(transcript), `${newId}.jsonl`), result.records);
       resumeId = newId;
-      pending = result.pending.map((p) => p.summary);
+      pending = result.pending.map((x) => x.summary);
     }
     const settings = sessionSettings({
       role: 'fork',
       env: {
-        PITSTOP_BRANCH: name,
+        PITSTOP_BRANCH: branch.name,
         PITSTOP_PARENT_SESSION: req.parentSessionId,
         PITSTOP_PORT_OFFSET: String(branch.portOffset),
       },
@@ -139,7 +65,7 @@ export async function forkSession(req: ForkRequest): Promise<BranchRecord> {
       effort: preset?.effort,
       permissionMode: preset?.permissionMode,
       prompt: forkPrompt({
-        name,
+        name: branch.name,
         task: req.task,
         parentSessionId: req.parentSessionId,
         parentName,
@@ -153,7 +79,7 @@ export async function forkSession(req: ForkRequest): Promise<BranchRecord> {
       sessionId: launched.sessionId,
       role: 'fork',
       repoId: ctx.repoId,
-      branch: name,
+      branch: branch.name,
       name: launched.name,
     });
     branch = saveBranch({
@@ -166,13 +92,6 @@ export async function forkSession(req: ForkRequest): Promise<BranchRecord> {
     });
     return branch;
   } catch (err) {
-    dropSnapshotRef(ctx.top, snap.ref);
-    releaseName(path.join(branchesDir(ctx.repoId), '.names'), name);
-    saveBranch({
-      ...branch,
-      state: 'failed',
-      note: err instanceof Error ? err.message : String(err),
-    });
-    throw err;
+    return abortFork(p, err);
   }
 }

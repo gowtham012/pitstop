@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { loadBranch, saveBranch, type BranchRecord } from '../branches.js';
+import { branchKind, loadBranch, saveBranch, type BranchRecord } from '../branches.js';
+import { sessionCost } from '../status.js';
 import { isBusy, listAgentsAsync, removeSession, stopSession } from '../claude/agents.js';
 import { loadConfig } from '../core/config.js';
 import { run, runSync } from '../core/exec.js';
@@ -34,6 +35,8 @@ export interface MergeOptions {
   skipTests?: boolean;
   /** Merge even if the fork's session is still mid-turn. */
   force?: boolean;
+  /** Cloud forks: fetch this branch from origin instead of pit/<name> (when the session pushed elsewhere). */
+  fromBranch?: string;
 }
 
 export interface MergeResult {
@@ -56,6 +59,48 @@ export function parentDirOf(b: BranchRecord): string {
 function changedFiles(cwd: string, from: string, to: string): string[] {
   const res = git(['diff', '--name-only', '-z', `${from}..${to}`], cwd);
   return res.code === 0 ? res.stdout.split('\0').filter(Boolean) : [];
+}
+
+/** What `pit report` needs about a fork's work, captured before its branch is deleted. */
+export function workSummary(
+  repoTop: string,
+  base: string,
+  branch: string,
+): Pick<BranchRecord, 'commits' | 'diffstat' | 'filesChanged'> {
+  const log = git(['log', '--oneline', '--no-decorate', `${base}..${branch}`], repoTop);
+  const stat = git(['diff', '--stat', `${base}..${branch}`], repoTop);
+  return {
+    commits: log.code === 0 ? log.stdout.split('\n').filter(Boolean) : [],
+    diffstat: stat.code === 0 ? stat.stdout.trimEnd() : '',
+    filesChanged: changedFiles(repoTop, base, branch),
+  };
+}
+
+function sessionFacts(b: BranchRecord): Pick<BranchRecord, 'lastMessage' | 'costUsd'> {
+  const c = b.sessionId ? sessionCost(b.sessionId) : undefined;
+  return c ? { lastMessage: c.last?.slice(0, 2000), costUsd: c.usd } : {};
+}
+
+/** Bring a cloud fork's pushed work into its local branch (and worktree). */
+function fetchCloudWork(b: BranchRecord, wt: string | undefined, fromBranch?: string): void {
+  const remoteBranch = fromBranch ?? b.gitBranch;
+  const fetch = git(['fetch', 'origin', remoteBranch], b.repoTop);
+  if (fetch.code !== 0) {
+    throw new MergeError(
+      `git fetch origin ${remoteBranch} failed: ${fetch.stderr.trim() || fetch.stdout.trim()}`,
+    );
+  }
+  const fetched = gitOk(['rev-parse', 'FETCH_HEAD'], b.repoTop);
+  if (wt) {
+    const ff = git(['merge', '--ff-only', fetched], wt, identityEnv(wt));
+    if (ff.code !== 0) {
+      throw new MergeError(
+        `The cloud session's ${remoteBranch} doesn't fast-forward the local ${b.gitBranch}. Resolve it in ${wt}, then merge again.`,
+      );
+    }
+  } else {
+    gitOk(['branch', '-f', b.gitBranch, fetched], b.repoTop);
+  }
 }
 
 function noteText(
@@ -104,6 +149,7 @@ export async function mergeBranch(
         );
       }
     }
+    if (branchKind(b) === 'cloud') fetchCloudWork(b, wt, opts.fromBranch);
     if (wt) commitAll(wt, `pitstop: ${b.task}`);
     const parentDir = parentDirOf(b);
     const parentHead = head(parentDir);
@@ -123,6 +169,7 @@ export async function mergeBranch(
     }
     const base = rebaseOk && wt ? parentHead : b.snapshotCommit;
     const files = forkHasChanges ? changedFiles(ctx.top, base, b.gitBranch) : [];
+    const work = forkHasChanges ? workSummary(ctx.top, base, b.gitBranch) : {};
 
     const gateWanted = (b.testGate ?? cfg.testGate) && !!cfg.test && !opts.skipTests;
     let gate: GateResult | undefined;
@@ -132,7 +179,16 @@ export async function mergeBranch(
         PITSTOP_PORT_OFFSET: String(b.portOffset),
       });
       if (!gate.ok) {
-        b = saveBranch({ ...b, note: `test gate failed (exit ${gate.code})` });
+        b = saveBranch({
+          ...b,
+          note: `test gate failed (exit ${gate.code})`,
+          gate: {
+            ok: false,
+            code: gate.code,
+            durationMs: gate.durationMs,
+            at: new Date().toISOString(),
+          },
+        });
         return {
           branch: b,
           strategy: 'blocked',
@@ -206,6 +262,16 @@ export async function mergeBranch(
       strategy === 'commit' || strategy === 'apply' || strategy === 'pr' || strategy === 'nothing';
     b = saveBranch({
       ...b,
+      ...work,
+      ...sessionFacts(b),
+      gate: gate
+        ? {
+            ok: gate.ok,
+            code: gate.code,
+            durationMs: gate.durationMs,
+            at: new Date().toISOString(),
+          }
+        : b.gate,
       state: finished ? 'merged' : 'deferred',
       mergedAt: finished ? new Date().toISOString() : undefined,
       mergeStrategy: strategy,
@@ -229,14 +295,19 @@ export function cleanupFork(b: BranchRecord, opts: { deleteBranch: boolean }): v
   if (id) removeSession(id);
   dropSnapshotRef(b.repoTop, b.snapshotRef);
   if (opts.deleteBranch) deleteBranch(b.repoTop, b.gitBranch, true);
+  // A cloud fork's branch also lives on origin; the cloud session itself is left for the user.
+  if (branchKind(b) === 'cloud') git(['push', 'origin', '--delete', b.gitBranch], b.repoTop);
 }
 
 export function discardBranch(cwd: string, name: string, keepBranch = false): BranchRecord {
   const ctx = repoContext(cwd);
   const b = loadBranch(ctx.repoId, name);
   if (!b) throw new MergeError(`No fork named "${name}"`);
+  if (b.worktree && fs.existsSync(b.worktree))
+    commitAll(b.worktree, `pitstop: ${b.task} (discarded)`);
+  const facts = { ...workSummary(b.repoTop, b.snapshotCommit, b.gitBranch), ...sessionFacts(b) };
   cleanupFork(b, { deleteBranch: !keepBranch });
-  return saveBranch({ ...b, state: 'discarded' });
+  return saveBranch({ ...b, ...facts, state: 'discarded' });
 }
 
 export type PullOutcome = 'ok' | 'needs-commit' | 'conflict' | 'no-worktree' | 'up-to-date';

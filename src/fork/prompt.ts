@@ -56,3 +56,52 @@ export function forkReminder(name: string, worktree: string | undefined, repoTop
     `The main session is still working in ${repoTop}; don't edit files there.`,
   ].join(' ');
 }
+
+export interface SummaryForkPromptOptions {
+  kind: 'cloud' | 'agent';
+  name: string;
+  task: string;
+  parentName: string;
+  /** Condensed conversation of the parent (see claude/digest.ts). */
+  digest: string;
+  gitBranch: string;
+  portOffset: number;
+  mergeMode: 'local' | 'pr';
+}
+
+/**
+ * First message for forks that can't load the parent's transcript: a cloud
+ * session or another agent. They get a summary, their one task, and how to
+ * hand the work back.
+ */
+export function summaryForkPrompt(o: SummaryForkPromptOptions): string {
+  const rules =
+    o.kind === 'cloud'
+      ? [
+          `- You are on branch ${o.gitBranch}. When the task is done, commit and push your work to ${o.gitBranch}.`,
+          o.mergeMode === 'pr'
+            ? '- Then open a draft pull request.'
+            : '- Do not open a pull request. pitstop merges the branch locally.',
+          `- If pushing to ${o.gitBranch} is refused, push to any branch you can and end your last message with: BRANCH: <that branch>`,
+        ]
+      : [
+          `- Work only in this directory (a git worktree on branch ${o.gitBranch}). Another session is working in the main checkout; don't touch it.`,
+          `- Use PITSTOP_PORT_OFFSET (${o.portOffset}) for any dev server, test server or database port.`,
+          '- When the task is done, commit your changes here with a clear message, then stop.',
+          '- Do not push or open a pull request. pitstop merges your branch locally.',
+        ];
+  return [
+    `You are pitstop fork "${o.name}", started from the Claude Code session "${o.parentName}" while it keeps working. Below is a summary of that conversation so you have its context. Do not continue its work.`,
+    '',
+    `Your only task: ${o.task}`,
+    '',
+    'Rules:',
+    ...rules,
+    '',
+    '----- conversation summary -----',
+    o.digest,
+    '----- end of summary -----',
+    '',
+    `Your only task: ${o.task}`,
+  ].join('\n');
+}

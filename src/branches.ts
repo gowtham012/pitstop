@@ -29,7 +29,21 @@ export interface BranchRecord {
   sessionId?: string;
   shortId?: string;
   sessionName: string;
-  forkMethod: 'native' | 'sealed';
+  /** Where the fork runs. Missing on records from before cloud and agent forks: treat as 'claude'. */
+  kind?: 'claude' | 'cloud' | 'agent';
+  /** Key of `agents` in config, for kind 'agent'. */
+  agent?: string;
+  /** For kind 'cloud': the cloud session, once its id appears on screen. */
+  cloudSessionId?: string;
+  cloudUrl?: string;
+  /** For kind 'cloud': the remote head of the fork's branch the last time it was checked. */
+  remoteHead?: string;
+  /** For kinds 'cloud' and 'agent': the program pitstop runs in the fork's pane. */
+  launch?: { cmd: string; args: string[]; cwd: string; env?: Record<string, string> };
+  /** For kind 'agent': arguments that reopen the agent's latest session after a restart. */
+  resumeArgs?: string[];
+  /** 'summary' for cloud and agent forks, which start from a conversation digest. */
+  forkMethod: 'native' | 'sealed' | 'summary';
   /** Commit with the parent's uncommitted work frozen in; the fork's own work is snapshot..branch. */
   snapshotCommit: string;
   snapshotRef?: string;
@@ -48,6 +62,17 @@ export interface BranchRecord {
   mergedAt?: string;
   mergeStrategy?: string;
   note?: string;
+  /** Kept for `pit report` because the branch itself is deleted after a merge. */
+  commits?: string[];
+  diffstat?: string;
+  filesChanged?: string[];
+  gate?: { ok: boolean; code: number; durationMs: number; at: string };
+  lastMessage?: string;
+  costUsd?: number;
+}
+
+export function branchKind(b: BranchRecord): 'claude' | 'cloud' | 'agent' {
+  return b.kind ?? 'claude';
 }
 
 /** Index from a Claude session id to pitstop's view of it. Written by pit and by hooks. */

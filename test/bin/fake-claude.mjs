@@ -46,7 +46,31 @@ if (argv[0] === 'stop' || argv[0] === 'rm') {
   process.exit(0);
 }
 
-if (argv[0] === 'attach') {
+if (argv.includes('--cloud')) {
+  const idx = argv.indexOf('--cloud');
+  if (argv.includes('-p')) {
+    // follow-up to an existing cloud session
+    fs.appendFileSync(
+      path.join(stateDir, 'cloud-messages.jsonl'),
+      JSON.stringify({ to: argv[idx + 1], argv }) + '\n',
+    );
+    process.stdout.write(`Sent to cloud session.\nSession ID: ${argv[idx + 1]}\n`);
+    process.exit(0);
+  }
+  const id = `session_01FAKE${crypto.randomBytes(4).toString('hex')}`;
+  fs.appendFileSync(
+    path.join(stateDir, 'cloud-sessions.jsonl'),
+    JSON.stringify({ id, cwd: process.cwd(), prompt: argv[idx + 1] }) + '\n',
+  );
+  process.stdout.write(
+    `Starting cloud session…\r\n✓ Cloned repository\r\nView: https://claude.ai/code/${id}?from=cli\r\n`,
+  );
+  process.stdin.setRawMode?.(true);
+  process.stdin.on('data', (d) => {
+    if (d.toString().includes('\x04')) process.exit(0);
+  });
+  setInterval(() => {}, 1000);
+} else if (argv[0] === 'attach') {
   const id = argv[1];
   process.stdout.write(`\x1b[2J\x1b[Hfake claude session ${id}\r\n❯ `);
   process.stdin.setRawMode?.(true);
