@@ -13,7 +13,9 @@ import { deleteTranscript } from '../claude/locate.js';
 import { sessionCost } from '../status.js';
 import {
   currentSessionId,
+  findAgent,
   isBusy,
+  listAgents,
   listAgentsAsync,
   removeSession,
   stopSession,
@@ -355,6 +357,15 @@ export async function deleteFork(
 
 function deleteLocked(b: BranchRecord, opts: DeleteOptions): DeleteResult {
   const finished = FINISHED.includes(b.state);
+  // The conversation may have moved to a new id since the fork started; find it while it's listed.
+  const convoIds = new Set(
+    [
+      b.sessionId,
+      opts.conversation && b.sessionId
+        ? findAgent(listAgents(true), b.sessionId)?.sessionId
+        : undefined,
+    ].filter((x): x is string => !!x),
+  );
   let branch = b;
   if (!finished) {
     if (b.worktree && fs.existsSync(b.worktree))
@@ -372,7 +383,7 @@ function deleteLocked(b: BranchRecord, opts: DeleteOptions): DeleteResult {
         `the cloud conversation stays in the cloud${b.cloudUrl ? `; archive it at ${b.cloudUrl}` : ''}`,
       );
     else if (kind === 'agent') notes.push(`the conversation is kept by ${b.agent ?? 'the agent'}`);
-    else if (b.sessionId) removedFiles.push(...deleteTranscript(b.sessionId));
+    else for (const id of convoIds) removedFiles.push(...deleteTranscript(id));
   }
   const forgotten = finished || !!opts.forget;
   if (forgotten) {

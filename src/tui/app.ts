@@ -521,7 +521,8 @@ export class App {
   private updateCosts(): void {
     for (const id of [this.main?.sessionId, ...this.branches.map((b) => b.sessionId)]) {
       if (!id) continue;
-      const c = sessionCost(id);
+      // Costs are keyed by pane id, but read from the conversation's current id.
+      const c = sessionCost(this.agents.get(id)?.sessionId ?? id);
       if (c) this.costs.set(id, c);
     }
     this.scheduleRender();
