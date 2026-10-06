@@ -184,3 +184,20 @@ export class LineEditor {
     return undefined;
   }
 }
+
+/**
+ * Length of the first keypress in a chunk of terminal input: a CSI or SS3
+ * escape sequence (arrows, mouse), a lone ESC, or one character.
+ */
+export function firstKeyLength(data: string): number {
+  if (data[0] !== '\x1b' || data.length === 1) return Math.max(1, [...data][0]?.length ?? 1);
+  if (data[1] === '[') {
+    for (let i = 2; i < data.length; i++) {
+      const c = data.charCodeAt(i);
+      if (c >= 0x40 && c <= 0x7e) return i + 1;
+    }
+    return data.length;
+  }
+  if (data[1] === 'O') return Math.min(3, data.length);
+  return 1;
+}

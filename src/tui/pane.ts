@@ -1,9 +1,7 @@
-import { createRequire } from 'node:module';
 import type { IPty } from 'node-pty';
 import type { Terminal as XTerm } from '@xterm/headless';
 import xterm from '@xterm/headless';
-
-const require = createRequire(import.meta.url);
+import { loadPty } from './pty.js';
 
 /** session: `claude attach`; agent: another coding agent; cloud: `claude --cloud`; command: a one-off tool like the diff pager. */
 export type PaneKind = 'session' | 'agent' | 'cloud' | 'command';
@@ -74,7 +72,7 @@ export class Pane {
   }
 
   private spawn(): void {
-    const pty = require('node-pty') as typeof import('node-pty');
+    const pty = loadPty();
     this.exited = false;
     this.exitCode = undefined;
     this.inAgentView = false;

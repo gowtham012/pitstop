@@ -1,6 +1,6 @@
 import xterm from '@xterm/headless';
 import { describe, expect, it } from 'vitest';
-import { InputRouter, LineEditor } from '../../src/tui/input.js';
+import { firstKeyLength, InputRouter, LineEditor } from '../../src/tui/input.js';
 import { computeLayout, split } from '../../src/tui/layout.js';
 import { diffScreens, Screen, stripControls, textWidth, truncate } from '../../src/tui/screen.js';
 
@@ -116,6 +116,17 @@ describe('input router', () => {
     expect(r().feed('\x1b[<0;10;5M')).toEqual([
       { type: 'mouse', button: 0, x: 9, y: 4, release: false },
     ]);
+  });
+});
+
+describe('firstKeyLength', () => {
+  it('splits one keypress off a chunk', () => {
+    expect(firstKeyLength('x\x1cq')).toBe(1);
+    expect(firstKeyLength('\x1b[Arest')).toBe(3);
+    expect(firstKeyLength('\x1b[<0;10;5Mq')).toBe(10);
+    expect(firstKeyLength('\x1bOPq')).toBe(3);
+    expect(firstKeyLength('\x1b')).toBe(1);
+    expect(firstKeyLength('😀y')).toBe(2);
   });
 });
 

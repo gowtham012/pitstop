@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import xterm from '@xterm/headless';
@@ -7,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { listBranches } from '../../src/branches.js';
 import { repoContext } from '../../src/core/git.js';
 import { handleHook } from '../../src/hook/entry.js';
+import { loadPty } from '../../src/tui/pty.js';
 import { fakeAgents, fakeCalls, isolate, makeRepo, write, commit, sh, tmpDir } from '../helpers.js';
 
 const FAKE_AGENT = path.resolve(
@@ -14,8 +14,7 @@ const FAKE_AGENT = path.resolve(
   '../bin/fake-agent.mjs',
 );
 
-const require = createRequire(import.meta.url);
-const pty = require('node-pty') as typeof import('node-pty');
+const pty = loadPty();
 const CLI = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../dist/cli.js');
 const PREFIX = '\x1c';
 
@@ -108,9 +107,8 @@ describe('pit split-pane UI', () => {
 
     d.send(`${PREFIX}t`);
     await d.waitFor(/branch tree/);
-    d.send('x');
-
-    d.send(`${PREFIX}q`);
+    // closing the overlay and the next command in one chunk: the command must still run
+    d.send(`x${PREFIX}q`);
     await d.waitFor(/Quit pit\?/);
     d.send('y');
     const start = Date.now();

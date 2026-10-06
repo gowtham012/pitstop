@@ -1,5 +1,4 @@
 import { spawnSync } from 'node:child_process';
-import { createRequire } from 'node:module';
 import readline from 'node:readline/promises';
 import { Command } from 'commander';
 import {
@@ -26,6 +25,7 @@ import { recordAgentConsent } from './fork/common.js';
 import { ConfirmationNeeded, forkSession, type ForkRequest } from './fork/fork.js';
 import { buildReport, renderReportHtml, renderReportMarkdown, writeReport } from './report.js';
 import { tuiRunning } from './tui/presence.js';
+import { loadPty } from './tui/pty.js';
 import { discardBranch, mergeBranch, pullFromParent, type MergeOptions } from './merge/merge.js';
 import { collectTouched, findOverlaps } from './radar.js';
 import { sessionCost, sessionState, treeLines, type CostInfo } from './status.js';
@@ -431,7 +431,7 @@ function buildProgram(): Command {
       let ptyOk = true;
       let ptyNote = 'ok';
       try {
-        createRequire(import.meta.url)('node-pty');
+        loadPty();
       } catch (err) {
         ptyOk = false;
         ptyNote = `${String(err).split('\n')[0]}. On Linux, install build tools (python3, make, g++) and reinstall.`;

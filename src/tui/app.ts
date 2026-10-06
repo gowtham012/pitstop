@@ -23,7 +23,7 @@ import { discardBranch, mergeBranch, pullFromParent } from '../merge/merge.js';
 import { collectTouched, findOverlaps, overlapKey, type Overlap } from '../radar.js';
 import { buildReport, writeReport } from '../report.js';
 import { sessionCost, sessionState, stateGlyph, treeLines, type CostInfo } from '../status.js';
-import { InputRouter, LineEditor, type Command } from './input.js';
+import { firstKeyLength, InputRouter, LineEditor, type Command } from './input.js';
 import { computeLayout, type Layout } from './layout.js';
 import { Pane } from './pane.js';
 import { tuiPidFile } from './presence.js';
@@ -451,8 +451,14 @@ export class App {
   // ---- input --------------------------------------------------------------
 
   private onData = (buf: Buffer): void => {
-    const data = buf.toString('utf8');
-    if (this.overlay) return this.overlayKey(data);
+    let data = buf.toString('utf8');
+    // An overlay takes one key; anything typed after it in the same chunk carries on.
+    while (this.overlay && data) {
+      const n = firstKeyLength(data);
+      this.overlayKey(data.slice(0, n));
+      data = data.slice(n);
+    }
+    if (!data) return;
     if (this.prompt) {
       // Feed Tab-separated pieces one at a time so quick repeated Tabs each count.
       for (const [i, piece] of data.split('\t').entries()) {
