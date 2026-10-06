@@ -8,7 +8,8 @@
   },
   "files": [
     "dist",
-    "plugin"
+    "README.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=20"
@@ -22,7 +23,8 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "pretest": "tsup"
+    "pretest": "tsup",
+    "prepublishOnly": "npm run build"
   },
   "keywords": [
     "claude",
@@ -32,7 +34,12 @@
     "worktree",
     "tui"
   ],
+  "author": "Gowtham Kumar Solleti",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gowtham012/pitstop.git"
+  },
   "dependencies": {
     "@xterm/headless": "^6.0.0",
     "commander": "^15.0.0",
