@@ -29,6 +29,7 @@ import {
 import { collectTouched, findOverlaps, overlapKey, type Overlap } from '../radar.js';
 import { buildReport, writeReport } from '../report.js';
 import { sessionCost, sessionState, stateGlyph, treeLines, type CostInfo } from '../status.js';
+import { startBackgroundUpgrade, takeNotice } from '../upgrade.js';
 import { firstKeyLength, InputRouter, LineEditor, type Command } from './input.js';
 import { computeLayout, type Layout, type PaneSlot } from './layout.js';
 import { Pane } from './pane.js';
@@ -200,8 +201,11 @@ export class App {
         12000,
       );
     } else {
-      this.flash('pitstop ready · ctrl+\\ f to fork · ctrl+\\ ? for help', STYLE.ok, 6000);
+      const notice = takeNotice();
+      if (notice) this.flash(notice, STYLE.ok, 12000);
+      else this.flash('pitstop ready · ctrl+\\ f to fork · ctrl+\\ ? for help', STYLE.ok, 6000);
     }
+    startBackgroundUpgrade(this.cfg.autoUpgrade);
     this.timers.push(
       setInterval(() => void this.refresh().then(() => this.reconcilePanes()), 1500),
     );

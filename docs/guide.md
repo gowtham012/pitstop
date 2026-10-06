@@ -242,13 +242,12 @@ Still stuck? Open an issue with the output of `pit doctor`: https://github.com/g
 
 ## Update and uninstall
 
-Update:
+pitstop updates itself. Once a day, when you start `pit`, it checks GitHub in the background and installs the new version, building it next to the old one so running sessions aren't disturbed. The next time you start `pit`, the status bar says what changed, for example `pitstop updated: 0.1.0 (dd4b70e) → 0.1.1 (a1b2c3d)`.
 
-```bash
-cd pitstop
-git pull
-npm install
-```
+- It never touches your clone if you have uncommitted changes or commits of your own there. It tells you instead.
+- Update right away: `pit upgrade`. Only check: `pit upgrade --check`.
+- Turn it off: add `"autoUpgrade": false` to `~/.pitstop/config.json`.
+- What happened: `~/.pitstop/logs/upgrade.log`.
 
 Uninstall:
 

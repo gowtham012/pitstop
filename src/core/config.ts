@@ -61,6 +61,8 @@ export interface PitConfig {
   radarIntervalMs: number;
   /** Port offset step per fork slot, exported as PITSTOP_PORT_OFFSET. */
   portStep: number;
+  /** Install new pitstop versions automatically in the background (user config only). */
+  autoUpgrade: boolean;
 }
 
 export const DEFAULT_CONFIG: PitConfig = {
@@ -84,6 +86,7 @@ export const DEFAULT_CONFIG: PitConfig = {
   },
   radarIntervalMs: 5000,
   portStep: 100,
+  autoUpgrade: true,
 };
 
 export type PartialConfig = Partial<Omit<PitConfig, 'merge' | 'setup'>> & {
@@ -171,6 +174,8 @@ export function sanitizeRepoConfig(
 ): { cfg: PartialConfig; dropped: string[] } {
   const dropped: string[] = [];
   const cfg: PartialConfig = { ...repoCfg, setup: { ...repoCfg.setup } };
+  // How pitstop updates itself is the user's call, not a repo's.
+  delete cfg.autoUpgrade;
   if (!trusted) {
     if (cfg.test) dropped.push(`test command "${cfg.test}"`);
     if (cfg.setup?.run) dropped.push(`setup command "${cfg.setup.run}"`);

@@ -63,6 +63,7 @@ export function isolate(): { home: string; fakeState: string; restore: () => voi
     FAKE_CLAUDE_STATE: process.env.FAKE_CLAUDE_STATE,
     CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR,
     PITSTOP_HOOK_CMD: process.env.PITSTOP_HOOK_CMD,
+    PITSTOP_NO_UPDATE: process.env.PITSTOP_NO_UPDATE,
   };
   const home = tmpDir('pitstop-home-');
   const fakeState = tmpDir('pitstop-fake-');
@@ -72,6 +73,7 @@ export function isolate(): { home: string; fakeState: string; restore: () => voi
   process.env.FAKE_CLAUDE_STATE = fakeState;
   process.env.CLAUDE_CONFIG_DIR = path.join(home, 'claude-config');
   process.env.PITSTOP_HOOK_CMD = 'pitstop-hook';
+  process.env.PITSTOP_NO_UPDATE = '1';
   return {
     home,
     fakeState,

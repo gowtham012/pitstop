@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import readline from 'node:readline/promises';
-import { Command } from 'commander';
+import { Command, Option } from 'commander';
 import {
   listBranches,
   loadBranch,
@@ -25,6 +25,7 @@ import { recordAgentConsent } from './fork/common.js';
 import { ConfirmationNeeded, forkSession, type ForkRequest } from './fork/fork.js';
 import { buildReport, renderReportHtml, renderReportMarkdown, writeReport } from './report.js';
 import { tuiRunning } from './tui/presence.js';
+import { installKind, loadState, packageRoot, upgrade } from './upgrade.js';
 import { loadPty } from './tui/pty.js';
 import {
   clearHistory,
@@ -53,6 +54,7 @@ const SUBCOMMANDS = new Set([
   'discard',
   'trust',
   'doctor',
+  'upgrade',
   'help',
 ]);
 
@@ -474,6 +476,37 @@ function buildProgram(): Command {
     });
 
   program
+    .command('upgrade')
+    .description('install the newest pitstop now (pit also does this by itself once a day)')
+    .option('--check', 'only say whether a newer version exists')
+    .addOption(new Option('--auto').hideHelp())
+    .action((o: { check?: boolean; auto?: boolean }) => {
+      if (o.auto && !loadConfig(process.cwd()).autoUpgrade) return;
+      const r = upgrade({ checkOnly: o.check });
+      const say = (s: string): void => {
+        process.stdout.write(`${o.auto ? `${new Date().toISOString()} ` : ''}${s}\n`);
+      };
+      switch (r.status) {
+        case 'up-to-date':
+          return say(`pitstop is up to date (${r.current})`);
+        case 'available':
+          return say(
+            `pitstop ${r.latest} is available (you have ${r.current}); run \`pit upgrade\``,
+          );
+        case 'upgraded':
+          return say(`pitstop updated: ${r.from} → ${r.to}`);
+        case 'blocked':
+          say(`not updating: ${r.reason}`);
+          return void (process.exitCode = o.auto ? 0 : 1);
+        case 'skipped':
+          return say(`not updating: ${r.reason}`);
+        case 'failed':
+          say(`update failed: ${r.reason}`);
+          return void (process.exitCode = 1);
+      }
+    });
+
+  program
     .command('doctor')
     .description('check that Claude Code, background sessions and the terminal layer work')
     .action(async () => {
@@ -517,6 +550,14 @@ function buildProgram(): Command {
         const found = runSync('sh', ['-c', `command -v ${JSON.stringify(a.cmd)}`]).code === 0;
         optional.push([`${name} agent`, found, found ? a.cmd : `${a.cmd} not on PATH (optional)`]);
       }
+      const root = packageRoot();
+      const auto = loadConfig(top).autoUpgrade;
+      const last = loadState();
+      optional.push([
+        'automatic updates',
+        auto,
+        `${auto ? 'on' : 'off'} · ${installKind(root)} install at ${root}${last.checkedAt ? ` · last check ${last.checkedAt.slice(0, 16).replace('T', ' ')}` : ''}${last.error ? ` · last error: ${last.error}` : ''}`,
+      ]);
       for (const [name, ok, note] of optional)
         process.stdout.write(`${ok ? '✓' : '·'} ${name}  ${note}\n`);
       if (checks.some(([, ok]) => !ok)) process.exitCode = 1;

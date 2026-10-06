@@ -122,6 +122,8 @@ Requirements:
 - macOS or Linux, Node 20+, git, and Claude Code with background sessions (`claude agents`). Tested with Claude Code 2.1.292.
 - On Linux, `node-pty` compiles during install, so you need `python3`, `make` and `g++`.
 
+**pitstop keeps itself up to date.** Once a day it checks for a new version and installs it in the background; the next `pit` tells you what changed. It never touches a clone with local changes or commits, and `"autoUpgrade": false` in `~/.pitstop/config.json` turns it off. `pit upgrade` updates right away.
+
 **New to pitstop? Read the [getting started guide](docs/guide.md).** It walks through installing, your first fork and merge, presets, repo setup, troubleshooting and uninstalling.
 
 ## Keys and commands
@@ -250,6 +252,7 @@ Output options:
 - **Ports:** each fork gets `PITSTOP_PORT_OFFSET` (100, 200, …) and `PITSTOP_BRANCH`. Use them in your dev and test config so forks don't collide.
 - **Budgets:** Claude Code can't cap a background session's spend, so pitstop stops a fork whose estimated cost passes its preset's `budgetUsd`.
 - **Session cap:** `maxSessions` counts main plus forks. They all share your account's rate limits.
+- **Updates:** `autoUpgrade` (default `true`, only read from your own config) installs new versions in the background once a day.
 
 ## Safety
 
