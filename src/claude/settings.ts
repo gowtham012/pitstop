@@ -27,7 +27,9 @@ export interface SessionSettingsOptions {
  */
 export function sessionSettings(opts: SessionSettingsOptions): Record<string, unknown> {
   const cmd = hookCommand();
-  const hook = (event: string) => [{ hooks: [{ type: 'command', command: `${cmd} ${event}`, timeout: 30 }] }];
+  const hook = (event: string) => [
+    { hooks: [{ type: 'command', command: `${cmd} ${event}`, timeout: 30 }] },
+  ];
   const hooks: Record<string, unknown> = {
     SessionStart: hook('SessionStart'),
     UserPromptSubmit: hook('UserPromptSubmit'),

@@ -3,7 +3,8 @@ import path from 'node:path';
 import { pitstopHome } from './paths.js';
 import { readJson, writeJsonAtomic } from './store.js';
 
-export type PermissionMode = 'acceptEdits' | 'auto' | 'bypassPermissions' | 'manual' | 'dontAsk' | 'plan';
+export type PermissionMode =
+  'acceptEdits' | 'auto' | 'bypassPermissions' | 'manual' | 'dontAsk' | 'plan';
 
 /** A one-key fork recipe, e.g. "hotfix". */
 export interface Preset {
@@ -96,11 +97,18 @@ export function repoCommands(repoCfg: PartialConfig | undefined): RepoCommands {
 }
 
 function commandsHash(cmds: RepoCommands): string {
-  return crypto.createHash('sha256').update(JSON.stringify([cmds.test ?? null, cmds.setupRun ?? null])).digest('hex');
+  return crypto
+    .createHash('sha256')
+    .update(JSON.stringify([cmds.test ?? null, cmds.setupRun ?? null]))
+    .digest('hex');
 }
 
 function trustFile(repoTop: string): string {
-  return path.join(pitstopHome(), 'trusted', `${crypto.createHash('sha1').update(repoTop).digest('hex').slice(0, 16)}.json`);
+  return path.join(
+    pitstopHome(),
+    'trusted',
+    `${crypto.createHash('sha1').update(repoTop).digest('hex').slice(0, 16)}.json`,
+  );
 }
 
 /** True when the user approved exactly these repo commands with `pit trust`. */
@@ -110,7 +118,12 @@ export function repoCommandsTrusted(repoTop: string, cmds: RepoCommands): boolea
 }
 
 export function trustRepoCommands(repoTop: string, cmds: RepoCommands): void {
-  writeJsonAtomic(trustFile(repoTop), { repoTop, hash: commandsHash(cmds), ...cmds, trustedAt: new Date().toISOString() });
+  writeJsonAtomic(trustFile(repoTop), {
+    repoTop,
+    hash: commandsHash(cmds),
+    ...cmds,
+    trustedAt: new Date().toISOString(),
+  });
 }
 
 export function readRepoConfig(repoTop: string): PartialConfig | undefined {
@@ -121,7 +134,10 @@ export function readRepoConfig(repoTop: string): PartialConfig | undefined {
  * Strip what a cloned repository must not be able to do on its own: run
  * commands the user hasn't approved, or hand forks elevated permissions.
  */
-export function sanitizeRepoConfig(repoCfg: PartialConfig, trusted: boolean): { cfg: PartialConfig; dropped: string[] } {
+export function sanitizeRepoConfig(
+  repoCfg: PartialConfig,
+  trusted: boolean,
+): { cfg: PartialConfig; dropped: string[] } {
   const dropped: string[] = [];
   const cfg: PartialConfig = { ...repoCfg, setup: { ...repoCfg.setup } };
   if (!trusted) {
@@ -149,11 +165,17 @@ export function sanitizeRepoConfig(repoCfg: PartialConfig, trusted: boolean): { 
  * elevated permission modes.
  */
 export function loadConfig(repoTop?: string): PitConfig & { untrusted?: string[] } {
-  let cfg = mergeConfig(DEFAULT_CONFIG, readJson<PartialConfig>(path.join(pitstopHome(), 'config.json')));
+  let cfg = mergeConfig(
+    DEFAULT_CONFIG,
+    readJson<PartialConfig>(path.join(pitstopHome(), 'config.json')),
+  );
   if (!repoTop) return cfg;
   const repoCfg = readRepoConfig(repoTop);
   if (!repoCfg) return cfg;
-  const { cfg: safe, dropped } = sanitizeRepoConfig(repoCfg, repoCommandsTrusted(repoTop, repoCommands(repoCfg)));
+  const { cfg: safe, dropped } = sanitizeRepoConfig(
+    repoCfg,
+    repoCommandsTrusted(repoTop, repoCommands(repoCfg)),
+  );
   cfg = mergeConfig(cfg, safe);
   return dropped.length ? { ...cfg, untrusted: dropped } : cfg;
 }
@@ -171,7 +193,10 @@ export function prefixByte(key: string): number {
 }
 
 /** "hotfix: fix the login" → preset hotfix. Unknown prefixes stay part of the task. */
-export function parseTaskInput(input: string, presets: Record<string, Preset>): { task: string; preset?: string } {
+export function parseTaskInput(
+  input: string,
+  presets: Record<string, Preset>,
+): { task: string; preset?: string } {
   const m = /^\s*([a-z0-9_-]+)\s*:\s*(.+)$/is.exec(input);
   if (m && m[1] && m[2] && presets[m[1].toLowerCase()]) {
     return { preset: m[1].toLowerCase(), task: m[2].trim() };

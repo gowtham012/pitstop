@@ -74,7 +74,13 @@ export function truncate(s: string, max: number): string {
   return out + '…';
 }
 
-function colorParams(isRgb: boolean, isPalette: boolean, color: number, base: number, bright: number): string {
+function colorParams(
+  isRgb: boolean,
+  isPalette: boolean,
+  color: number,
+  base: number,
+  bright: number,
+): string {
   if (isRgb) return `;${base + 8};2;${(color >> 16) & 255};${(color >> 8) & 255};${color & 255}`;
   if (isPalette) {
     if (color < 8) return `;${base + color}`;
@@ -123,7 +129,8 @@ export class Screen {
   }
 
   fill(r: Rect, ch = ' ', sgr = '0'): void {
-    for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) this.set(x, y, { ch, w: 1, sgr });
+    for (let y = r.y; y < r.y + r.h; y++)
+      for (let x = r.x; x < r.x + r.w; x++) this.set(x, y, { ch, w: 1, sgr });
   }
 
   /** Write text clipped to `maxW` columns. Returns the column after the last character. */
@@ -174,7 +181,10 @@ export function diffScreens(prev: Screen | undefined, next: Screen): string {
     let cursorAt = -1;
     while (x < next.cols) {
       const c = next.get(x, y);
-      const changed = full || !sameCell(prev!.get(x, y), c) || (c.w === 2 && !sameCell(prev!.get(x + 1, y), next.get(x + 1, y)));
+      const changed =
+        full ||
+        !sameCell(prev!.get(x, y), c) ||
+        (c.w === 2 && !sameCell(prev!.get(x + 1, y), next.get(x + 1, y)));
       if (!changed || c.w === 0) {
         x++;
         continue;

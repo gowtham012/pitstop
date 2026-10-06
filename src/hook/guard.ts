@@ -17,9 +17,172 @@ export type GuardDecision = { deny: false } | { deny: true; reason: string };
 
 const FILE_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
 
-/** git subcommands that change files, the index, refs or the remote. */
-const MUTATING_GIT =
-  /\bgit\b[^;&|\n]*?\b(?:checkout|switch|reset|stash|commit|merge|rebase|restore|clean|add|rm|mv|push|pull|cherry-pick|revert|apply|am|tag|worktree|update-ref|branch\s+(?:\S+\s+)*?(?:-[a-zA-Z]*[dDmMcCf][a-zA-Z]*|--delete|--move|--copy|--force)\b)/;
+/** git subcommands that only read. Anything else is treated as changing files, the index or refs. */
+const READ_ONLY_GIT = new Set([
+  'status',
+  'log',
+  'diff',
+  'show',
+  'blame',
+  'grep',
+  'ls-files',
+  'ls-tree',
+  'rev-parse',
+  'rev-list',
+  'describe',
+  'shortlog',
+  'cat-file',
+  'merge-base',
+  'name-rev',
+  'for-each-ref',
+  'show-ref',
+  'version',
+  'help',
+  'remote',
+  'config',
+  'whatchanged',
+  'count-objects',
+  'check-ignore',
+  'var',
+]);
+
+/** `git branch` flags that only list. Any other argument creates, moves or deletes a branch. */
+const BRANCH_LIST_FLAGS =
+  /^(?:-a|-r|-v|-vv|-l|--list|--all|--remotes|--verbose|--show-current|--no-column|--column(?:=.*)?|--sort=.*|--format=.*|--contains|--no-contains|--merged|--no-merged|--points-at|--color(?:=.*)?|--no-color)$/;
+
+/** git options that come before the subcommand and take a value. */
+const GIT_GLOBAL_WITH_VALUE = new Set([
+  '-C',
+  '-c',
+  '--git-dir',
+  '--work-tree',
+  '--namespace',
+  '--exec-path',
+  '--config-env',
+]);
+
+/**
+ * Split a shell command into simple commands and words, honoring quotes and
+ * backslashes, so `git "branch" -D x` and `git branch --del x` are seen for
+ * what they are. Not a full shell parser; enough for a guardrail.
+ */
+export function shellWords(cmd: string): string[][] {
+  const commands: string[][] = [];
+  let words: string[] = [];
+  let word = '';
+  let inWord = false;
+  let quote: '"' | "'" | undefined;
+  const endWord = () => {
+    if (inWord) words.push(word);
+    word = '';
+    inWord = false;
+  };
+  const endCommand = () => {
+    endWord();
+    if (words.length) commands.push(words);
+    words = [];
+  };
+  for (let i = 0; i < cmd.length; i++) {
+    const ch = cmd[i]!;
+    if (quote) {
+      if (ch === quote) quote = undefined;
+      else if (ch === '\\' && quote === '"' && i + 1 < cmd.length) word += cmd[++i];
+      else word += ch;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      inWord = true;
+    } else if (ch === '\\' && i + 1 < cmd.length) {
+      word += cmd[++i];
+      inWord = true;
+    } else if (
+      ch === ';' ||
+      ch === '&' ||
+      ch === '|' ||
+      ch === '\n' ||
+      ch === '(' ||
+      ch === ')' ||
+      ch === '`'
+    ) {
+      endCommand();
+    } else if (ch === ' ' || ch === '\t') {
+      endWord();
+    } else {
+      word += ch;
+      inWord = true;
+    }
+  }
+  endCommand();
+  return commands;
+}
+
+const BRANCH_LIST_VALUE_FLAGS = new Set([
+  '--contains',
+  '--no-contains',
+  '--merged',
+  '--no-merged',
+  '--points-at',
+  '--sort',
+  '--format',
+]);
+
+/** `git branch` only lists when every flag is a listing flag, and names appear only as --list patterns. */
+function branchIsListing(args: string[]): boolean {
+  const listing = args.includes('--list') || args.includes('-l');
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i]!;
+    if (BRANCH_LIST_VALUE_FLAGS.has(a)) {
+      i++;
+      continue;
+    }
+    if (a.startsWith('-')) {
+      if (!BRANCH_LIST_FLAGS.test(a)) return false;
+    } else if (!listing) return false;
+  }
+  return true;
+}
+
+/** True when any git invocation in `cmd` would change files, the index or refs. */
+export function gitMutates(cmd: string): boolean {
+  for (const words of shellWords(cmd)) {
+    let i = 0;
+    while (i < words.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[i]!)) i++; // VAR=value prefixes
+    if (words[i] === 'command' || words[i] === 'env' || words[i] === 'exec') i++;
+    const prog = words[i];
+    if (!prog || (prog !== 'git' && !prog.endsWith('/git'))) continue;
+    i++;
+    while (i < words.length && words[i]!.startsWith('-')) {
+      const opt = words[i]!;
+      i += GIT_GLOBAL_WITH_VALUE.has(opt) ? 2 : 1;
+    }
+    const sub = words[i];
+    if (!sub) continue;
+    const args = words.slice(i + 1);
+    if (sub === 'branch') {
+      if (branchIsListing(args)) continue;
+      return true;
+    }
+    if (sub === 'stash' && (args[0] === 'list' || args[0] === 'show')) continue;
+    if (
+      sub === 'tag' &&
+      (args.length === 0 || args.every((a) => /^(-l|--list|-n\d*|--sort=.*|--contains)$/.test(a)))
+    )
+      continue;
+    if (sub === 'worktree' && args[0] === 'list') continue;
+    if (sub === 'remote' && args.length && !['-v', 'show', 'get-url'].includes(args[0]!))
+      return true;
+    if (
+      sub === 'config' &&
+      !args.some((a) => /^(--get|--get-all|--list|-l|--get-regexp)$/.test(a))
+    ) {
+      if (args.filter((a) => !a.startsWith('-')).length >= 2) return true; // config key value
+      continue;
+    }
+    if (!READ_ONLY_GIT.has(sub)) return true;
+  }
+  return false;
+}
 
 const ALLOW: GuardDecision = { deny: false };
 
@@ -74,7 +237,7 @@ export function guardDecision(g: GuardInput): GuardDecision {
 
   const cmd = String(g.toolInput.command ?? '');
   const cwdOutside = !own || !isInside(realResolve(g.cwd), realResolve(own));
-  if (cwdOutside && forbidden(g.cwd, g, own) && MUTATING_GIT.test(cmd)) {
+  if (cwdOutside && forbidden(g.cwd, g, own) && gitMutates(cmd)) {
     return {
       deny: true,
       reason: own
@@ -85,7 +248,7 @@ export function guardDecision(g: GuardInput): GuardDecision {
   const base = own && !cwdOutside ? g.cwd : (own ?? g.cwd);
   const targets = [...absolutePaths(cmd), ...dirArguments(cmd).map((d) => path.resolve(base, d))];
   for (const p of targets) {
-    if (forbidden(p, g, own) && (own || MUTATING_GIT.test(cmd) || /\bcd\b/.test(cmd))) {
+    if (forbidden(p, g, own) && (own || gitMutates(cmd) || /\bcd\b/.test(cmd))) {
       return {
         deny: true,
         reason: own
@@ -108,10 +271,12 @@ export function absolutePaths(cmd: string): string[] {
 /** Relative directories a command moves into or points git at: `cd X`, `git -C X`, `--git-dir=X`, `--work-tree X`. */
 export function dirArguments(cmd: string): string[] {
   const out: string[] = [];
-  const re = /(?:\bcd\s+|\bgit\s+-C\s+|--git-dir[=\s]+|--work-tree[=\s]+|\bpushd\s+)(["']?)([^\s"';|&)]+)\1/g;
+  const re =
+    /(?:\bcd\s+|\bgit\s+-C\s+|--git-dir[=\s]+|--work-tree[=\s]+|\bpushd\s+)(["']?)([^\s"';|&)]+)\1/g;
   for (let m = re.exec(cmd); m; m = re.exec(cmd)) {
     const d = m[2];
-    if (d && !d.startsWith('/') && d !== '-' && !d.startsWith('$') && !d.startsWith('~')) out.push(d);
+    if (d && !d.startsWith('/') && d !== '-' && !d.startsWith('$') && !d.startsWith('~'))
+      out.push(d);
   }
   return out;
 }

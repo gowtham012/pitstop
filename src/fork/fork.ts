@@ -69,7 +69,10 @@ export async function forkSession(req: ForkRequest): Promise<BranchRecord> {
   const taken = new Set(branches.map((b) => b.name));
   const slug = slugify(req.name ?? req.task);
   let name = uniqueName(slug, taken);
-  while (branchExists(ctx.top, `pit/${name}`) || !claimName(path.join(branchesDir(ctx.repoId), '.names'), name)) {
+  while (
+    branchExists(ctx.top, `pit/${name}`) ||
+    !claimName(path.join(branchesDir(ctx.repoId), '.names'), name)
+  ) {
     taken.add(name);
     name = uniqueName(slug, taken);
   }
@@ -146,7 +149,13 @@ export async function forkSession(req: ForkRequest): Promise<BranchRecord> {
         pending,
       }),
     });
-    upsertSession({ sessionId: launched.sessionId, role: 'fork', repoId: ctx.repoId, branch: name, name: launched.name });
+    upsertSession({
+      sessionId: launched.sessionId,
+      role: 'fork',
+      repoId: ctx.repoId,
+      branch: name,
+      name: launched.name,
+    });
     branch = saveBranch({
       ...branch,
       sessionId: launched.sessionId,
@@ -159,7 +168,11 @@ export async function forkSession(req: ForkRequest): Promise<BranchRecord> {
   } catch (err) {
     dropSnapshotRef(ctx.top, snap.ref);
     releaseName(path.join(branchesDir(ctx.repoId), '.names'), name);
-    saveBranch({ ...branch, state: 'failed', note: err instanceof Error ? err.message : String(err) });
+    saveBranch({
+      ...branch,
+      state: 'failed',
+      note: err instanceof Error ? err.message : String(err),
+    });
     throw err;
   }
 }

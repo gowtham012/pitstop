@@ -21,16 +21,27 @@ export interface MainSession {
  * background session (so it survives `pit` quitting) that keeps editing
  * the user's checkout.
  */
-export async function ensureMainSession(cwd: string, claudeArgs: string[] = [], prompt?: string): Promise<MainSession> {
+export async function ensureMainSession(
+  cwd: string,
+  claudeArgs: string[] = [],
+  prompt?: string,
+): Promise<MainSession> {
   const ctx = repoContext(cwd);
   const agents = await listAgentsAsync();
-  const known = listJson<SessionRecord>(sessionsDir()).filter((s) => s.role === 'main' && s.repoId === ctx.repoId);
+  const known = listJson<SessionRecord>(sessionsDir()).filter(
+    (s) => s.role === 'main' && s.repoId === ctx.repoId,
+  );
   const alive = known
     .map((s) => agents.find((a: AgentInfo) => a.sessionId === s.sessionId))
     .filter((a): a is AgentInfo => !!a);
   const existing = alive[0];
   if (existing && !prompt && !claudeArgs.length) {
-    return { sessionId: existing.sessionId, shortId: existing.id, name: existing.name ?? mainSessionName(ctx.name), reused: true };
+    return {
+      sessionId: existing.sessionId,
+      shortId: existing.id,
+      name: existing.name ?? mainSessionName(ctx.name),
+      reused: true,
+    };
   }
   const name = mainSessionName(ctx.name);
   const launched = await startBackground({
@@ -40,13 +51,35 @@ export async function ensureMainSession(cwd: string, claudeArgs: string[] = [], 
     extraArgs: claudeArgs,
     prompt,
   });
-  upsertSession({ sessionId: launched.sessionId, role: 'main', repoId: ctx.repoId, name: launched.name, cwd });
-  return { sessionId: launched.sessionId, shortId: launched.shortId, name: launched.name, reused: false };
+  upsertSession({
+    sessionId: launched.sessionId,
+    role: 'main',
+    repoId: ctx.repoId,
+    name: launched.name,
+    cwd,
+  });
+  return {
+    sessionId: launched.sessionId,
+    shortId: launched.shortId,
+    name: launched.name,
+    reused: false,
+  };
 }
 
 /** Adopt an already-running session (e.g. one started with plain `claude`) as this repo's main. */
 export function adoptMainSession(cwd: string, agent: AgentInfo): MainSession {
   const ctx = repoContext(cwd);
-  upsertSession({ sessionId: agent.sessionId, role: 'main', repoId: ctx.repoId, name: agent.name, cwd: agent.cwd });
-  return { sessionId: agent.sessionId, shortId: agent.id, name: agent.name ?? 'main', reused: true };
+  upsertSession({
+    sessionId: agent.sessionId,
+    role: 'main',
+    repoId: ctx.repoId,
+    name: agent.name,
+    cwd: agent.cwd,
+  });
+  return {
+    sessionId: agent.sessionId,
+    shortId: agent.id,
+    name: agent.name ?? 'main',
+    reused: true,
+  };
 }

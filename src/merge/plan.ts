@@ -27,7 +27,10 @@ export function planMerge(f: MergeFacts): MergePlan {
   if (!f.forkHasChanges) return { strategy: 'nothing', reason: 'the fork made no commits' };
   if (f.mode === 'pr') return { strategy: 'pr', reason: 'merge.mode is "pr"' };
   if (!f.rebaseOk) {
-    return { strategy: 'defer', reason: "the fork's commits conflict with the parent's latest commits" };
+    return {
+      strategy: 'defer',
+      reason: "the fork's commits conflict with the parent's latest commits",
+    };
   }
   if (f.parentClean) return { strategy: 'commit', reason: "the parent's working tree is clean" };
   if (f.overlap.length) {
@@ -37,7 +40,13 @@ export function planMerge(f: MergeFacts): MergePlan {
     };
   }
   if (f.applyCheckOk) {
-    return { strategy: 'apply', reason: "the parent is mid-edit, but in different files; the fork's changes apply cleanly" };
+    return {
+      strategy: 'apply',
+      reason: "the parent is mid-edit, but in different files; the fork's changes apply cleanly",
+    };
   }
-  return { strategy: 'defer', reason: "the fork's patch doesn't apply cleanly to the parent's working tree" };
+  return {
+    strategy: 'defer',
+    reason: "the fork's patch doesn't apply cleanly to the parent's working tree",
+  };
 }

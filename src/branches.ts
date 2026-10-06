@@ -3,16 +3,16 @@ import { branchesDir, sessionsDir } from './core/paths.js';
 import { listJson, readJson, writeJsonAtomic } from './core/store.js';
 
 export type BranchState =
-  | 'starting'
-  | 'running'
-  | 'idle'
-  | 'done'
-  | 'failed'
-  | 'deferred'
-  | 'merged'
-  | 'discarded';
+  'starting' | 'running' | 'idle' | 'done' | 'failed' | 'deferred' | 'merged' | 'discarded';
 
-export const LIVE_STATES: BranchState[] = ['starting', 'running', 'idle', 'done', 'failed', 'deferred'];
+export const LIVE_STATES: BranchState[] = [
+  'starting',
+  'running',
+  'idle',
+  'done',
+  'failed',
+  'deferred',
+];
 
 export interface BranchRecord {
   name: string;
@@ -79,7 +79,9 @@ export function loadBranch(repoId: string, name: string): BranchRecord | undefin
 }
 
 export function listBranches(repoId: string): BranchRecord[] {
-  return listJson<BranchRecord>(branchesDir(repoId)).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  return listJson<BranchRecord>(branchesDir(repoId)).sort((a, b) =>
+    a.createdAt.localeCompare(b.createdAt),
+  );
 }
 
 export function updateBranch(
@@ -115,7 +117,9 @@ export function branchForSession(sessionId: string): BranchRecord | undefined {
 
 /** Lowest port slot (1, 2, …) not used by a live fork in this repo. Slot 0 is main. */
 export function nextPortSlot(branches: BranchRecord[]): number {
-  const used = new Set(branches.filter((b) => LIVE_STATES.includes(b.state)).map((b) => b.portSlot));
+  const used = new Set(
+    branches.filter((b) => LIVE_STATES.includes(b.state)).map((b) => b.portSlot),
+  );
   let slot = 1;
   while (used.has(slot)) slot++;
   return slot;

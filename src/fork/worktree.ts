@@ -15,7 +15,11 @@ export function forkWorktreePath(repoTop: string, name: string): string {
  * `git add -A`. Uses .git/info/exclude, which is local and never committed.
  */
 export function excludeWorktreesDir(repoTop: string): void {
-  const exclude = path.join(gitOk(['rev-parse', '--path-format=absolute', '--git-common-dir'], repoTop), 'info', 'exclude');
+  const exclude = path.join(
+    gitOk(['rev-parse', '--path-format=absolute', '--git-common-dir'], repoTop),
+    'info',
+    'exclude',
+  );
   const line = '/.claude/worktrees/';
   let current = '';
   try {
@@ -25,7 +29,10 @@ export function excludeWorktreesDir(repoTop: string): void {
   }
   if (current.split('\n').some((l) => l.trim() === line)) return;
   fs.mkdirSync(path.dirname(exclude), { recursive: true });
-  fs.appendFileSync(exclude, `${current && !current.endsWith('\n') ? '\n' : ''}# added by pitstop\n${line}\n`);
+  fs.appendFileSync(
+    exclude,
+    `${current && !current.endsWith('\n') ? '\n' : ''}# added by pitstop\n${line}\n`,
+  );
 }
 
 function isWorktree(dir: string): boolean {
@@ -87,7 +94,11 @@ export function applySetup(branch: BranchRecord, dir: string, setup: SetupConfig
       shell: true,
       detached: true,
       stdio: ['ignore', log, log],
-      env: { ...process.env, PITSTOP_BRANCH: branch.name, PITSTOP_PORT_OFFSET: String(branch.portOffset) },
+      env: {
+        ...process.env,
+        PITSTOP_BRANCH: branch.name,
+        PITSTOP_PORT_OFFSET: String(branch.portOffset),
+      },
     });
     child.unref();
   }
@@ -95,7 +106,11 @@ export function applySetup(branch: BranchRecord, dir: string, setup: SetupConfig
 
 /** Default WorktreeCreate behavior for sessions pitstop doesn't know about. */
 export function createPlainWorktree(cwd: string, rawName: string): string {
-  const name = rawName.replace(/[^A-Za-z0-9._-]+/g, '-').replace(/^[.-]+/, '').slice(0, 64) || 'worktree';
+  const name =
+    rawName
+      .replace(/[^A-Za-z0-9._-]+/g, '-')
+      .replace(/^[.-]+/, '')
+      .slice(0, 64) || 'worktree';
   const top = gitOk(['rev-parse', '--show-toplevel'], cwd);
   const root = path.join(top, '.claude', 'worktrees');
   const dir = path.join(root, name);

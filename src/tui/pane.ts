@@ -48,7 +48,12 @@ export class Pane {
     this.id = opts.id;
     this.kind = opts.kind;
     this.title = opts.title;
-    this.term = new xterm.Terminal({ cols: opts.cols, rows: opts.rows, allowProposedApi: true, scrollback: 2000 });
+    this.term = new xterm.Terminal({
+      cols: opts.cols,
+      rows: opts.rows,
+      allowProposedApi: true,
+      scrollback: 2000,
+    });
     this.trackModes();
     this.spawn();
   }
@@ -127,7 +132,8 @@ export class Pane {
   lines(): string[] {
     const buf = this.term.buffer.active;
     const out: string[] = [];
-    for (let r = 0; r < this.term.rows; r++) out.push(buf.getLine(buf.viewportY + r)?.translateToString(true) ?? '');
+    for (let r = 0; r < this.term.rows; r++)
+      out.push(buf.getLine(buf.viewportY + r)?.translateToString(true) ?? '');
     return out;
   }
 

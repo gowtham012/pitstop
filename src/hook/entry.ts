@@ -56,7 +56,8 @@ function json(event: string, fields: Record<string, unknown>): string {
 export function resolveBranch(input: HookInput, allowTranscript = true): BranchRecord | undefined {
   const known = branchForSession(input.session_id);
   if (known) return known;
-  const text = input.prompt ?? (allowTranscript ? latestMarkedPrompt(input.transcript_path) : undefined);
+  const text =
+    input.prompt ?? (allowTranscript ? latestMarkedPrompt(input.transcript_path) : undefined);
   const m = text ? parseMarker(text) : undefined;
   if (!m || !input.cwd) return undefined;
   let repoId: string;
@@ -77,7 +78,12 @@ function latestMarkedPrompt(transcriptPath: string | undefined): string | undefi
   const records = readTranscriptSnapshot(transcriptPath);
   for (let i = records.length - 1; i >= 0; i--) {
     const c = records[i]?.message?.content;
-    const text = typeof c === 'string' ? c : Array.isArray(c) ? c.map((b) => (b as { text?: string }).text ?? '').join(' ') : '';
+    const text =
+      typeof c === 'string'
+        ? c
+        : Array.isArray(c)
+          ? c.map((b) => (b as { text?: string }).text ?? '').join(' ')
+          : '';
     if (parseMarker(text)) return text;
   }
   return undefined;
@@ -107,7 +113,9 @@ export function handleHook(event: string, input: HookInput): HookOutput {
         ...(loadSession(sid) ? {} : { role: 'fork' as const }),
       });
       const branch = resolveBranch(input, false);
-      const reminder = branch ? forkReminder(branch.name, branch.worktree, branch.repoTop) : undefined;
+      const reminder = branch
+        ? forkReminder(branch.name, branch.worktree, branch.repoTop)
+        : undefined;
       return deliver(event, sid, reminder);
     }
 

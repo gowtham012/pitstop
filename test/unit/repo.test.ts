@@ -32,9 +32,23 @@ const MAIN = '11111111-1111-4111-8111-111111111111';
 
 function seedMain(status = 'idle') {
   setFakeAgents(env.fakeState, [
-    { sessionId: MAIN, id: '11111111', name: 'repo-main', kind: 'background', status, state: 'done', cwd: repo },
+    {
+      sessionId: MAIN,
+      id: '11111111',
+      name: 'repo-main',
+      kind: 'background',
+      status,
+      state: 'done',
+      cwd: repo,
+    },
   ]);
-  upsertSession({ sessionId: MAIN, role: 'main', repoId: repoContext(repo).repoId, name: 'repo-main', cwd: repo });
+  upsertSession({
+    sessionId: MAIN,
+    role: 'main',
+    repoId: repoContext(repo).repoId,
+    name: 'repo-main',
+    cwd: repo,
+  });
 }
 
 /** Simulate the fork's first edit: Claude Code calls WorktreeCreate, then the agent commits work. */
@@ -77,7 +91,12 @@ describe('fork', () => {
   it('forks an idle parent natively, with marker prompt and per-session hooks', async () => {
     seedMain('idle');
     write(repo, 'app.py', 'print("wip")\n');
-    const b = await forkSession({ cwd: repo, parentSessionId: MAIN, task: 'Fix the login bug', mode: 'pane' });
+    const b = await forkSession({
+      cwd: repo,
+      parentSessionId: MAIN,
+      task: 'Fix the login bug',
+      mode: 'pane',
+    });
     expect(b.name).toBe('fix-the-login-bug');
     expect(b.forkMethod).toBe('native');
     expect(b.state).toBe('running');
@@ -100,13 +119,28 @@ describe('fork', () => {
     const projectDir = path.join(process.env.CLAUDE_CONFIG_DIR!, 'projects', 'repo');
     fs.mkdirSync(projectDir, { recursive: true });
     const lines = [
-      { type: 'user', uuid: 'a', parentUuid: null, sessionId: MAIN, message: { role: 'user', content: 'run tests' } },
       {
-        type: 'assistant', uuid: 'b', parentUuid: 'a', sessionId: MAIN,
-        message: { role: 'assistant', content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'pytest' } }] },
+        type: 'user',
+        uuid: 'a',
+        parentUuid: null,
+        sessionId: MAIN,
+        message: { role: 'user', content: 'run tests' },
+      },
+      {
+        type: 'assistant',
+        uuid: 'b',
+        parentUuid: 'a',
+        sessionId: MAIN,
+        message: {
+          role: 'assistant',
+          content: [{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'pytest' } }],
+        },
       },
     ];
-    fs.writeFileSync(path.join(projectDir, `${MAIN}.jsonl`), lines.map((l) => JSON.stringify(l)).join('\n') + '\n');
+    fs.writeFileSync(
+      path.join(projectDir, `${MAIN}.jsonl`),
+      lines.map((l) => JSON.stringify(l)).join('\n') + '\n',
+    );
     const b = await forkSession({ cwd: repo, parentSessionId: MAIN, task: 'hotfix', mode: 'pane' });
     expect(b.forkMethod).toBe('sealed');
     expect(b.pendingAtFork).toEqual(['Bash pytest']);
@@ -123,14 +157,18 @@ describe('fork', () => {
     write(repo, '.pitstop.json', JSON.stringify({ maxSessions: 2 }));
     commit(repo, 'cfg');
     await forkSession({ cwd: repo, parentSessionId: MAIN, task: 'one', mode: 'pane' });
-    await expect(forkSession({ cwd: repo, parentSessionId: MAIN, task: 'two', mode: 'pane' })).rejects.toThrow(/limit 2/);
+    await expect(
+      forkSession({ cwd: repo, parentSessionId: MAIN, task: 'two', mode: 'pane' }),
+    ).rejects.toThrow(/limit 2/);
   });
 
   it('reports an untrusted workspace clearly and marks the fork failed', async () => {
     seedMain();
     process.env.FAKE_CLAUDE_UNTRUSTED = '1';
     try {
-      await expect(forkSession({ cwd: repo, parentSessionId: MAIN, task: 'x', mode: 'pane' })).rejects.toThrow(/trust/);
+      await expect(
+        forkSession({ cwd: repo, parentSessionId: MAIN, task: 'x', mode: 'pane' }),
+      ).rejects.toThrow(/trust/);
     } finally {
       delete process.env.FAKE_CLAUDE_UNTRUSTED;
     }
@@ -142,36 +180,62 @@ describe('hooks', () => {
   it('builds the fork worktree from the snapshot and guards writes outside it', async () => {
     seedMain();
     write(repo, 'app.py', 'print("wip")\n');
-    const b = await forkSession({ cwd: repo, parentSessionId: MAIN, task: 'guard me', mode: 'pane' });
+    const b = await forkSession({
+      cwd: repo,
+      parentSessionId: MAIN,
+      task: 'guard me',
+      mode: 'pane',
+    });
     const wt = startWorking(b.sessionId!, {});
     expect(wt).toBe(path.join(repo, '.claude', 'worktrees', 'pit-guard-me'));
     expect(read(wt, 'app.py')).toBe('print("wip")\n'); // sees the parent's uncommitted work
     expect(sh('git', ['status', '--porcelain'], repo)).toBe('M app.py'); // worktree dir excluded
     const deny = handleHook('PreToolUse', {
-      session_id: b.sessionId!, cwd: wt, tool_name: 'Edit', tool_input: { file_path: path.join(repo, 'app.py') },
+      session_id: b.sessionId!,
+      cwd: wt,
+      tool_name: 'Edit',
+      tool_input: { file_path: path.join(repo, 'app.py') },
     });
     expect(JSON.parse(deny.stdout!).hookSpecificOutput.permissionDecision).toBe('deny');
     const allow = handleHook('PreToolUse', {
-      session_id: b.sessionId!, cwd: wt, tool_name: 'Edit', tool_input: { file_path: path.join(wt, 'app.py') },
+      session_id: b.sessionId!,
+      cwd: wt,
+      tool_name: 'Edit',
+      tool_input: { file_path: path.join(wt, 'app.py') },
     });
     expect(allow.stdout).toBeUndefined();
   });
 
   it('maps a session to its fork from the marker in its prompt', async () => {
     seedMain();
-    const b = await forkSession({ cwd: repo, parentSessionId: MAIN, task: 'by marker', mode: 'pane' });
+    const b = await forkSession({
+      cwd: repo,
+      parentSessionId: MAIN,
+      task: 'by marker',
+      mode: 'pane',
+    });
     const other = crypto.randomUUID();
     saveBranch({ ...b, sessionId: undefined });
     handleHook('UserPromptSubmit', {
-      session_id: other, cwd: repo, prompt: `[pitstop:${b.name} parent=${MAIN}] Your only task: x`,
+      session_id: other,
+      cwd: repo,
+      prompt: `[pitstop:${b.name} parent=${MAIN}] Your only task: x`,
     });
     expect(loadBranch(b.repoId, b.name)!.sessionId).toBe(other);
   });
 
   it('delivers inbox messages once, after a tool call', () => {
-    sendInbox({ to: MAIN, from: 'fix', kind: 'merged', text: 'fork fix was merged', files: ['a.py'] });
+    sendInbox({
+      to: MAIN,
+      from: 'fix',
+      kind: 'merged',
+      text: 'fork fix was merged',
+      files: ['a.py'],
+    });
     const first = handleHook('PostToolUse', { session_id: MAIN });
-    expect(JSON.parse(first.stdout!).hookSpecificOutput.additionalContext).toContain('fork fix was merged');
+    expect(JSON.parse(first.stdout!).hookSpecificOutput.additionalContext).toContain(
+      'fork fix was merged',
+    );
     expect(handleHook('PostToolUse', { session_id: MAIN }).stdout).toBeUndefined();
     expect(claimInbox(MAIN)).toEqual([]);
   });
@@ -219,12 +283,18 @@ describe('merge', () => {
     expect(loadBranch(b.repoId, b.name)!.state).toBe('deferred');
     expect(claimInbox(MAIN)[0]!.text).toContain('NOT merged');
     // still live and still overlapping, so the radar keeps warning about it
-    expect(await scanRadar(repo, listBranches(b.repoId))).toEqual([{ file: 'app.py', sessions: ['main', 'touch-app'] }]);
+    expect(await scanRadar(repo, listBranches(b.repoId))).toEqual([
+      { file: 'app.py', sessions: ['main', 'touch-app'] },
+    ]);
   });
 
   it('blocks the merge when the test gate fails', async () => {
     seedMain();
-    write(repo, '.pitstop.json', JSON.stringify({ test: 'test -f must-exist.txt', testGate: true }));
+    write(
+      repo,
+      '.pitstop.json',
+      JSON.stringify({ test: 'test -f must-exist.txt', testGate: true }),
+    );
     commit(repo, 'cfg');
     trustRepoCommands(repo, { test: 'test -f must-exist.txt' });
     const b = await forkWithWork('gated', { 'x.py': '1\n' });
@@ -252,10 +322,12 @@ describe('merge', () => {
     const b = await forkSession({ cwd: repo, parentSessionId: MAIN, task: 'radar', mode: 'pane' });
     startWorking(b.sessionId!, { 'README.md': '# fork\n' });
     write(repo, 'README.md', '# main\n');
-    expect(await scanRadar(repo, listBranches(b.repoId))).toEqual([{ file: 'README.md', sessions: ['main', 'radar'] }]);
+    expect(await scanRadar(repo, listBranches(b.repoId))).toEqual([
+      { file: 'README.md', sessions: ['main', 'radar'] },
+    ]);
   });
 
-  it('pulls the parent\'s latest commits into a fork', async () => {
+  it("pulls the parent's latest commits into a fork", async () => {
     seedMain();
     const b = await forkWithWork('pull me', {});
     write(b.worktree!, 'fork.txt', 'f\n');
@@ -305,15 +377,26 @@ describe('repo config safety', () => {
 
   it('blocks writes through a symlink that leads into the main checkout', async () => {
     seedMain();
-    const b = await forkSession({ cwd: repo, parentSessionId: MAIN, task: 'symlink', mode: 'pane' });
+    const b = await forkSession({
+      cwd: repo,
+      parentSessionId: MAIN,
+      task: 'symlink',
+      mode: 'pane',
+    });
     const wt = startWorking(b.sessionId!, {});
     fs.symlinkSync(repo, path.join(wt, 'parent'));
     const out = handleHook('PreToolUse', {
-      session_id: b.sessionId!, cwd: wt, tool_name: 'Write', tool_input: { file_path: path.join(wt, 'parent', 'app.py') },
+      session_id: b.sessionId!,
+      cwd: wt,
+      tool_name: 'Write',
+      tool_input: { file_path: path.join(wt, 'parent', 'app.py') },
     });
     expect(JSON.parse(out.stdout!).hookSpecificOutput.permissionDecision).toBe('deny');
     const cd = handleHook('PreToolUse', {
-      session_id: b.sessionId!, cwd: wt, tool_name: 'Bash', tool_input: { command: 'cd ../../.. && git stash' },
+      session_id: b.sessionId!,
+      cwd: wt,
+      tool_name: 'Bash',
+      tool_input: { command: 'cd ../../.. && git stash' },
     });
     expect(JSON.parse(cd.stdout!).hookSpecificOutput.permissionDecision).toBe('deny');
   });
@@ -338,6 +421,7 @@ describe('locks', () => {
         }),
       ),
     );
-    for (let i = 0; i < order.length; i += 2) expect(order[i]!.slice(-1)).toBe(order[i + 1]!.slice(-1));
+    for (let i = 0; i < order.length; i += 2)
+      expect(order[i]!.slice(-1)).toBe(order[i + 1]!.slice(-1));
   });
 });

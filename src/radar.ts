@@ -25,13 +25,21 @@ export function findOverlaps(touched: Map<string, string[]>): Overlap[] {
 }
 
 /** What every live session has changed: main's uncommitted files, each fork's own work since its snapshot. */
-export async function collectTouched(repoTop: string, branches: BranchRecord[]): Promise<Map<string, string[]>> {
+export async function collectTouched(
+  repoTop: string,
+  branches: BranchRecord[],
+): Promise<Map<string, string[]>> {
   const touched = new Map<string, string[]>();
-  touched.set('main', (await statusAsync(repoTop)).map((e) => e.path));
+  touched.set(
+    'main',
+    (await statusAsync(repoTop)).map((e) => e.path),
+  );
   await Promise.all(
     branches
       .filter((b) => LIVE_STATES.includes(b.state) && b.worktree && fs.existsSync(b.worktree))
-      .map(async (b) => touched.set(b.name, await touchedFilesAsync(b.worktree!, b.snapshotCommit))),
+      .map(async (b) =>
+        touched.set(b.name, await touchedFilesAsync(b.worktree!, b.snapshotCommit)),
+      ),
   );
   return touched;
 }

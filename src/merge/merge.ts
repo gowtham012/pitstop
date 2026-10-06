@@ -58,7 +58,12 @@ function changedFiles(cwd: string, from: string, to: string): string[] {
   return res.code === 0 ? res.stdout.split('\0').filter(Boolean) : [];
 }
 
-function noteText(b: BranchRecord, strategy: MergeStrategy, files: string[], reason: string): string {
+function noteText(
+  b: BranchRecord,
+  strategy: MergeStrategy,
+  files: string[],
+  reason: string,
+): string {
   const what = {
     commit: `was merged into your branch as a merge commit`,
     apply: `was applied to your working tree as uncommitted changes (nothing staged)`,
@@ -78,18 +83,25 @@ function noteText(b: BranchRecord, strategy: MergeStrategy, files: string[], rea
  * Bring a fork's work back. Runs under a per-repo lock so merges happen one
  * at a time, and each later merge is rebased onto what earlier ones brought in.
  */
-export async function mergeBranch(cwd: string, name: string, opts: MergeOptions = {}): Promise<MergeResult> {
+export async function mergeBranch(
+  cwd: string,
+  name: string,
+  opts: MergeOptions = {},
+): Promise<MergeResult> {
   const ctx = repoContext(cwd);
   const cfg = loadConfig(ctx.top);
   return withLock(path.join(repoStateDir(ctx.repoId), 'merge.lock'), async () => {
     let b = loadBranch(ctx.repoId, name);
     if (!b) throw new MergeError(`No fork named "${name}"`);
-    if (b.state === 'merged' || b.state === 'discarded') throw new MergeError(`Fork "${name}" is already ${b.state}`);
+    if (b.state === 'merged' || b.state === 'discarded')
+      throw new MergeError(`Fork "${name}" is already ${b.state}`);
     const wt = b.worktree && fs.existsSync(b.worktree) ? b.worktree : undefined;
     if (!opts.force && b.sessionId) {
       const agent = (await listAgentsAsync()).find((a) => a.sessionId === b!.sessionId);
       if (isBusy(agent)) {
-        throw new MergeError(`Fork "${name}" is still working. Wait for it to finish, or pass --force.`);
+        throw new MergeError(
+          `Fork "${name}" is still working. Wait for it to finish, or pass --force.`,
+        );
       }
     }
     if (wt) commitAll(wt, `pitstop: ${b.task}`);
@@ -99,7 +111,11 @@ export async function mergeBranch(cwd: string, name: string, opts: MergeOptions 
     const forkHasChanges = revCount(ctx.top, `${b.snapshotCommit}..${b.gitBranch}`) > 0;
     let rebaseOk = true;
     if (forkHasChanges && wt) {
-      const res = git(['rebase', '--onto', parentHead, b.snapshotCommit, b.gitBranch], wt, identityEnv(wt));
+      const res = git(
+        ['rebase', '--onto', parentHead, b.snapshotCommit, b.gitBranch],
+        wt,
+        identityEnv(wt),
+      );
       if (res.code !== 0) {
         git(['rebase', '--abort'], wt);
         rebaseOk = false;
@@ -117,14 +133,23 @@ export async function mergeBranch(cwd: string, name: string, opts: MergeOptions 
       });
       if (!gate.ok) {
         b = saveBranch({ ...b, note: `test gate failed (exit ${gate.code})` });
-        return { branch: b, strategy: 'blocked', reason: `\`${cfg.test}\` failed in the fork's worktree`, files, gate };
+        return {
+          branch: b,
+          strategy: 'blocked',
+          reason: `\`${cfg.test}\` failed in the fork's worktree`,
+          files,
+          gate,
+        };
       }
     }
 
     const dirty = dirtyFiles(parentDir);
-    const patch = forkHasChanges ? git(['diff', '--binary', `${base}..${b.gitBranch}`], ctx.top).stdout : '';
+    const patch = forkHasChanges
+      ? git(['diff', '--binary', `${base}..${b.gitBranch}`], ctx.top).stdout
+      : '';
     const applyCheckOk =
-      !!patch && runSync('git', ['apply', '--check', '-'], { cwd: parentDir, input: patch }).code === 0;
+      !!patch &&
+      runSync('git', ['apply', '--check', '-'], { cwd: parentDir, input: patch }).code === 0;
     const plan = opts.strategy
       ? { strategy: opts.strategy as MergeStrategy, reason: 'chosen with --strategy' }
       : planMerge({
@@ -139,7 +164,11 @@ export async function mergeBranch(cwd: string, name: string, opts: MergeOptions 
     let strategy = plan.strategy;
     let reason = plan.reason;
     if (strategy === 'commit') {
-      const res = git(['merge', '--no-ff', '-m', `pitstop: merge ${b.name}: ${b.task}`, b.gitBranch], parentDir, identityEnv(parentDir));
+      const res = git(
+        ['merge', '--no-ff', '-m', `pitstop: merge ${b.name}: ${b.task}`, b.gitBranch],
+        parentDir,
+        identityEnv(parentDir),
+      );
       if (res.code !== 0) {
         git(['merge', '--abort'], parentDir);
         strategy = 'defer';
@@ -154,8 +183,13 @@ export async function mergeBranch(cwd: string, name: string, opts: MergeOptions 
     } else if (strategy === 'pr') {
       const push = git(['push', '-u', 'origin', b.gitBranch], ctx.top);
       if (push.code !== 0) throw new MergeError(`git push failed: ${push.stderr.trim()}`);
-      const pr = await run('gh', ['pr', 'create', '--fill', '--draft', '--head', b.gitBranch], { cwd: ctx.top });
-      reason = pr.code === 0 ? pr.stdout.trim() : 'pushed; open the pull request on GitHub (gh CLI not available)';
+      const pr = await run('gh', ['pr', 'create', '--fill', '--draft', '--head', b.gitBranch], {
+        cwd: ctx.top,
+      });
+      reason =
+        pr.code === 0
+          ? pr.stdout.trim()
+          : 'pushed; open the pull request on GitHub (gh CLI not available)';
     }
 
     if (strategy !== 'nothing') {
@@ -168,7 +202,8 @@ export async function mergeBranch(cwd: string, name: string, opts: MergeOptions 
       });
     }
 
-    const finished = strategy === 'commit' || strategy === 'apply' || strategy === 'pr' || strategy === 'nothing';
+    const finished =
+      strategy === 'commit' || strategy === 'apply' || strategy === 'pr' || strategy === 'nothing';
     b = saveBranch({
       ...b,
       state: finished ? 'merged' : 'deferred',
@@ -176,7 +211,8 @@ export async function mergeBranch(cwd: string, name: string, opts: MergeOptions 
       mergeStrategy: strategy,
       note: reason,
     });
-    if (finished && !opts.keep) cleanupFork(b, { deleteBranch: strategy === 'commit' || strategy === 'nothing' });
+    if (finished && !opts.keep)
+      cleanupFork(b, { deleteBranch: strategy === 'commit' || strategy === 'nothing' });
     return { branch: b, strategy, reason, files, gate };
   });
 }
@@ -220,12 +256,16 @@ export function pullFromParent(cwd: string, name: string): { outcome: PullOutcom
       to: b.sessionId ?? b.parentSessionId,
       from: 'pitstop',
       kind: 'pull',
-      text: 'The user wants to bring in the main session\'s latest commits. Commit your current work in your worktree first, then say so; pitstop will rebase you.',
+      text: "The user wants to bring in the main session's latest commits. Commit your current work in your worktree first, then say so; pitstop will rebase you.",
     });
     return { outcome: 'needs-commit' };
   }
   // --onto drops the snapshot commit itself, so the parent's old uncommitted work isn't replayed.
-  const res = git(['rebase', '--onto', parentHead, b.snapshotCommit, b.gitBranch], b.worktree, identityEnv(b.worktree));
+  const res = git(
+    ['rebase', '--onto', parentHead, b.snapshotCommit, b.gitBranch],
+    b.worktree,
+    identityEnv(b.worktree),
+  );
   if (res.code !== 0) {
     git(['rebase', '--abort'], b.worktree);
     return { outcome: 'conflict' };

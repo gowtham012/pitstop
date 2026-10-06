@@ -16,11 +16,20 @@ export async function runTestGate(
   timeoutMs = 30 * 60_000,
 ): Promise<GateResult> {
   const start = Date.now();
-  const res = await run(process.platform === 'win32' ? 'cmd' : 'sh', [process.platform === 'win32' ? '/c' : '-c', command], {
-    cwd,
-    env: { ...process.env, ...env, CI: process.env.CI ?? '1' },
-    timeoutMs,
-  });
+  const res = await run(
+    process.platform === 'win32' ? 'cmd' : 'sh',
+    [process.platform === 'win32' ? '/c' : '-c', command],
+    {
+      cwd,
+      env: { ...process.env, ...env, CI: process.env.CI ?? '1' },
+      timeoutMs,
+    },
+  );
   const out = `${res.stdout}\n${res.stderr}`.trimEnd().split('\n');
-  return { ok: res.code === 0, code: res.code, tail: out.slice(-40).join('\n'), durationMs: Date.now() - start };
+  return {
+    ok: res.code === 0,
+    code: res.code,
+    tail: out.slice(-40).join('\n'),
+    durationMs: Date.now() - start,
+  };
 }

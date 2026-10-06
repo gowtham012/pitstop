@@ -66,9 +66,15 @@ export function computeLayout(l: LayoutInput): Layout {
   if (!main) return { panes: [], hidden: [], status, orientation: 'single' };
 
   if (l.zoom && l.ids.includes(l.zoom)) {
-    return { panes: [slot(l.zoom, area)], hidden: l.ids.filter((id) => id !== l.zoom), status, orientation: 'single' };
+    return {
+      panes: [slot(l.zoom, area)],
+      hidden: l.ids.filter((id) => id !== l.zoom),
+      status,
+      orientation: 'single',
+    };
   }
-  if (!forks.length) return { panes: [slot(main, area)], hidden: [], status, orientation: 'single' };
+  if (!forks.length)
+    return { panes: [slot(main, area)], hidden: [], status, orientation: 'single' };
 
   const side = cols >= l.splitColumns;
   const forkSpace = side ? area.h : area.h - Math.ceil(area.h / 2) - 1;

@@ -10,7 +10,10 @@ const stateDir = process.env.FAKE_CLAUDE_STATE ?? path.join(process.cwd(), '.fak
 fs.mkdirSync(stateDir, { recursive: true });
 const agentsFile = path.join(stateDir, 'agents.json');
 const argv = process.argv.slice(2);
-fs.appendFileSync(path.join(stateDir, 'calls.jsonl'), JSON.stringify({ argv, cwd: process.cwd() }) + '\n');
+fs.appendFileSync(
+  path.join(stateDir, 'calls.jsonl'),
+  JSON.stringify({ argv, cwd: process.cwd() }) + '\n',
+);
 
 const load = () => {
   try {
@@ -34,7 +37,9 @@ if (argv[0] === 'agents') {
 if (argv[0] === 'stop' || argv[0] === 'rm') {
   const id = argv[1];
   const agents = load().map((a) =>
-    a.id === id || a.sessionId === id ? { ...a, status: 'idle', state: argv[0] === 'rm' ? 'removed' : 'done' } : a,
+    a.id === id || a.sessionId === id
+      ? { ...a, status: 'idle', state: argv[0] === 'rm' ? 'removed' : 'done' }
+      : a,
   );
   save(argv[0] === 'rm' ? agents.filter((a) => a.id !== id && a.sessionId !== id) : agents);
   process.stdout.write(`${argv[0] === 'rm' ? 'removed' : 'stopped'} ${id}\n`);
@@ -64,7 +69,9 @@ if (argv[0] === 'attach') {
   const id = sessionId.slice(0, 8);
   const name = flag('-n') ?? `session-${id}`;
   if (resume && forkSession && agents.some((a) => a.sessionId === resume)) {
-    process.stdout.write(`note: session ${resume.slice(0, 8)} is already running in the background, so this started a copy as ${id}.\n`);
+    process.stdout.write(
+      `note: session ${resume.slice(0, 8)} is already running in the background, so this started a copy as ${id}.\n`,
+    );
   }
   agents.push({
     pid: process.pid,
@@ -78,7 +85,9 @@ if (argv[0] === 'attach') {
     state: 'done',
   });
   save(agents);
-  process.stdout.write(`backgrounded · ${id} · ${name}\n  claude attach ${id}    open in this terminal\n`);
+  process.stdout.write(
+    `backgrounded · ${id} · ${name}\n  claude attach ${id}    open in this terminal\n`,
+  );
   process.exit(0);
 } else {
   process.stdout.write(`fake-claude: unsupported ${argv.join(' ')}\n`);

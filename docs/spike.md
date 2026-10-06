@@ -7,18 +7,35 @@ Run on 2026-10-06 against Claude Code **v2.1.291** on Linux. Each finding below 
 Prints a JSON array of live sessions. Interactive sessions look like this:
 
 ```json
-{ "pid": 94, "cwd": "/home/user/GetPitlane", "kind": "interactive", "startedAt": 1791303637452,
-  "sessionId": "adbc5b98-…", "name": "getpitlane-20", "status": "busy" }
+{
+  "pid": 94,
+  "cwd": "/home/user/GetPitlane",
+  "kind": "interactive",
+  "startedAt": 1791303637452,
+  "sessionId": "adbc5b98-…",
+  "name": "getpitlane-20",
+  "status": "busy"
+}
 ```
 
 Background sessions also carry a short `id`, a `state`, and sometimes `waitingFor`:
 
 ```json
-{ "pid": 1788, "id": "651b085b", "cwd": "…/repo", "kind": "background", "startedAt": 1791305378763,
-  "sessionId": "651b085b-6b5e-…", "name": "pitspike-main", "status": "idle", "state": "done" }
+{
+  "pid": 1788,
+  "id": "651b085b",
+  "cwd": "…/repo",
+  "kind": "background",
+  "startedAt": 1791305378763,
+  "sessionId": "651b085b-6b5e-…",
+  "name": "pitspike-main",
+  "status": "idle",
+  "state": "done"
+}
 ```
 
 Values seen:
+
 - `status`: `busy`, `idle`, `waiting`
 - `state`: `working`, `blocked`, `done`
 - `waitingFor`: e.g. `permission prompt`
@@ -31,7 +48,7 @@ Values seen:
 
 - `claude --bg -n <name> "<prompt>"` prints `backgrounded · <shortId> · <name>`. The first run also prints `Starting background service…`.
 - `claude --resume <sessionId> --fork-session --bg -n <name> "<prompt>"` starts a **copy with the full history** and the prompt. The test fork correctly recalled a word told only to the parent.
-- **Without `--fork-session`**, `--resume <id> --bg` *continues* an idle session under its own id instead of copying it. pitstop always passes `--fork-session`.
+- **Without `--fork-session`**, `--resume <id> --bg` _continues_ an idle session under its own id instead of copying it. pitstop always passes `--fork-session`.
 - `--bg` **ignores `--session-id`** (it prints a warning). pitstop reads the short id from the output and looks up the full `sessionId` in `claude agents --json`.
 - **Pitfall:** `--allowedTools <tools...>` takes a variable number of values, so it swallowed the prompt. The session started with no prompt and showed "idle — send a prompt to start". pitstop never passes variadic flags. Permissions, hooks and env go in one `--settings '<json>'` value, and the prompt goes last.
 - Background sessions need the folder to be **trusted** first (otherwise: "Workspace not trusted. Run `claude` … once"). `pit` shows that message instead of failing silently.
@@ -86,10 +103,10 @@ Claude Code doesn't bind `ctrl+\` in any context ([keybindings docs](https://cod
 
 ## Decisions this changes
 
-| Topic | Before the spike | Now |
-|---|---|---|
-| Fork path | own transcript cut as fallback | native fork when the parent is idle, sealed copy when it's busy |
-| Learning the fork's id | `--session-id` | parse `backgrounded · <id>` and look it up in `agents --json` |
-| Worktree folder | `~/.pitstop/worktrees` | `<repo>/.claude/worktrees/pit-<name>` (inherits trust, same as native) |
-| Installing hooks | plugin or global settings merge | per-session `--settings` (zero install); a plugin is optional |
-| Main session isolation | n/a | `worktree.bgIsolation: none` |
+| Topic                  | Before the spike                | Now                                                                    |
+| ---------------------- | ------------------------------- | ---------------------------------------------------------------------- |
+| Fork path              | own transcript cut as fallback  | native fork when the parent is idle, sealed copy when it's busy        |
+| Learning the fork's id | `--session-id`                  | parse `backgrounded · <id>` and look it up in `agents --json`          |
+| Worktree folder        | `~/.pitstop/worktrees`          | `<repo>/.claude/worktrees/pit-<name>` (inherits trust, same as native) |
+| Installing hooks       | plugin or global settings merge | per-session `--settings` (zero install); a plugin is optional          |
+| Main session isolation | n/a                             | `worktree.bgIsolation: none`                                           |

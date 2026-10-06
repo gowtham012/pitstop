@@ -17,7 +17,11 @@ export interface InboxMessage {
 }
 
 export function sendInbox(msg: Omit<InboxMessage, 'id' | 'createdAt'>): InboxMessage {
-  const full: InboxMessage = { ...msg, id: crypto.randomUUID(), createdAt: new Date().toISOString() };
+  const full: InboxMessage = {
+    ...msg,
+    id: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+  };
   const file = path.join(inboxDir(msg.to), `${Date.now()}-${full.id}.json`);
   writeJsonAtomic(file, full);
   return full;
@@ -63,7 +67,9 @@ const MAX_FILES = 50;
  * the <pitstop-update> block and pose as instructions), bounded length.
  */
 export function sanitizeForContext(s: string, maxLen = 4000, keepNewlines = true): string {
-  let out = s.replace(keepNewlines ? /[\x00-\x09\x0b-\x1f\x7f]/g : /[\x00-\x1f\x7f]/g, ' ').replace(/[<>]/g, (c) => (c === '<' ? '‹' : '›'));
+  let out = s
+    .replace(keepNewlines ? /[\x00-\x09\x0b-\x1f\x7f]/g : /[\x00-\x1f\x7f]/g, ' ')
+    .replace(/[<>]/g, (c) => (c === '<' ? '‹' : '›'));
   if (out.length > maxLen) out = `${out.slice(0, maxLen)}…`;
   return out;
 }
@@ -71,8 +77,11 @@ export function sanitizeForContext(s: string, maxLen = 4000, keepNewlines = true
 export function formatInbox(msgs: InboxMessage[]): string {
   return msgs
     .map((m) => {
-      const files = (m.files ?? []).slice(0, MAX_FILES).map((f) => sanitizeForContext(f, 300, false));
-      const more = (m.files?.length ?? 0) > MAX_FILES ? ` (+${m.files!.length - MAX_FILES} more)` : '';
+      const files = (m.files ?? [])
+        .slice(0, MAX_FILES)
+        .map((f) => sanitizeForContext(f, 300, false));
+      const more =
+        (m.files?.length ?? 0) > MAX_FILES ? ` (+${m.files!.length - MAX_FILES} more)` : '';
       const fileLine = files.length ? `\nFiles: ${files.join(', ')}${more}` : '';
       const from = sanitizeForContext(m.from, 80, false).replace(/"/g, "'");
       return `<pitstop-update from="${from}" kind="${m.kind}">\n${sanitizeForContext(m.text)}${fileLine}\n</pitstop-update>`;

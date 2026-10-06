@@ -7,7 +7,9 @@ export class GitError extends Error {
     public readonly args: string[],
     public readonly result: RunResult,
   ) {
-    super(`git ${args.join(' ')} failed (${result.code}): ${result.stderr.trim() || result.stdout.trim()}`);
+    super(
+      `git ${args.join(' ')} failed (${result.code}): ${result.stderr.trim() || result.stdout.trim()}`,
+    );
   }
 }
 
@@ -76,7 +78,12 @@ export function repoContext(cwd: string): RepoContext {
   const common = commonDir(cwd);
   // For a normal repo the common dir is <main>/.git; worktrees share it.
   const mainTop = path.basename(common) === '.git' ? path.dirname(common) : topLevel(cwd);
-  return { top: mainTop, commonDir: common, repoId: repoIdFor(common), name: path.basename(mainTop) };
+  return {
+    top: mainTop,
+    commonDir: common,
+    repoId: repoIdFor(common),
+    name: path.basename(mainTop),
+  };
 }
 
 export interface StatusEntry {
@@ -120,7 +127,11 @@ export async function touchedFilesAsync(cwd: string, base?: string): Promise<str
   const files = new Set<string>();
   if (base) {
     const diff = await gitAsync(['diff', '--name-only', `${base}..HEAD`], cwd);
-    if (diff.code === 0) diff.stdout.split('\n').filter(Boolean).forEach((f) => files.add(f));
+    if (diff.code === 0)
+      diff.stdout
+        .split('\n')
+        .filter(Boolean)
+        .forEach((f) => files.add(f));
   }
   for (const e of await statusAsync(cwd)) files.add(e.path);
   return [...files].sort();

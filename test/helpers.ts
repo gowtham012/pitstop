@@ -4,14 +4,22 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const FAKE_CLAUDE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'bin', 'fake-claude.mjs');
+export const FAKE_CLAUDE = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  'bin',
+  'fake-claude.mjs',
+);
 
 export function tmpDir(prefix = 'pitstop-test-'): string {
   return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), prefix)));
 }
 
 export function sh(cmd: string, args: string[], cwd: string): string {
-  return execFileSync(cmd, args, { cwd, encoding: 'utf8', env: { ...process.env, ...GIT_ENV } }).trim();
+  return execFileSync(cmd, args, {
+    cwd,
+    encoding: 'utf8',
+    env: { ...process.env, ...GIT_ENV },
+  }).trim();
 }
 
 const GIT_ENV = {
@@ -78,7 +86,10 @@ export function isolate(): { home: string; fakeState: string; restore: () => voi
 
 export function fakeAgents(fakeState: string): Record<string, unknown>[] {
   try {
-    return JSON.parse(fs.readFileSync(path.join(fakeState, 'agents.json'), 'utf8')) as Record<string, unknown>[];
+    return JSON.parse(fs.readFileSync(path.join(fakeState, 'agents.json'), 'utf8')) as Record<
+      string,
+      unknown
+    >[];
   } catch {
     return [];
   }

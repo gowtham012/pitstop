@@ -82,7 +82,7 @@ export function activeChain(records: TranscriptRecord[]): TranscriptRecord[] {
   for (const r of records) if (isTurn(r)) leaf = r;
   const chain: TranscriptRecord[] = [];
   const seen = new Set<string>();
-  for (let cur = leaf; cur && cur.uuid && !seen.has(cur.uuid); ) {
+  for (let cur = leaf; cur && cur.uuid && !seen.has(cur.uuid);) {
     seen.add(cur.uuid);
     chain.push(cur);
     cur = cur.parentUuid ? byUuid.get(cur.parentUuid) : undefined;
@@ -260,7 +260,10 @@ const PRICES: [RegExp, number, number][] = [
 export function estimateCostUsd(u: Usage): number {
   const [, inP, outP] = PRICES.find(([re]) => u.model && re.test(u.model)) ?? [/./, 3, 15];
   return (
-    (u.inputTokens * inP + u.outputTokens * outP + u.cacheReadTokens * inP * 0.1 + u.cacheWriteTokens * inP * 1.25) /
+    (u.inputTokens * inP +
+      u.outputTokens * outP +
+      u.cacheReadTokens * inP * 0.1 +
+      u.cacheWriteTokens * inP * 1.25) /
     1_000_000
   );
 }

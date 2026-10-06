@@ -38,17 +38,22 @@ export function parseAgents(json: string): AgentInfo[] {
   }
   if (!Array.isArray(data)) return [];
   return data.filter(
-    (a): a is AgentInfo => !!a && typeof a === 'object' && typeof (a as AgentInfo).sessionId === 'string',
+    (a): a is AgentInfo =>
+      !!a && typeof a === 'object' && typeof (a as AgentInfo).sessionId === 'string',
   );
 }
 
 export function listAgents(all = false): AgentInfo[] {
-  const res = runSync(claudeBin(), ['agents', '--json', ...(all ? ['--all'] : [])], { timeoutMs: 20_000 });
+  const res = runSync(claudeBin(), ['agents', '--json', ...(all ? ['--all'] : [])], {
+    timeoutMs: 20_000,
+  });
   return res.code === 0 ? parseAgents(res.stdout) : [];
 }
 
 export async function listAgentsAsync(all = false): Promise<AgentInfo[]> {
-  const res = await run(claudeBin(), ['agents', '--json', ...(all ? ['--all'] : [])], { timeoutMs: 20_000 });
+  const res = await run(claudeBin(), ['agents', '--json', ...(all ? ['--all'] : [])], {
+    timeoutMs: 20_000,
+  });
   return res.code === 0 ? parseAgents(res.stdout) : [];
 }
 
@@ -112,17 +117,25 @@ export interface LaunchedSession {
 }
 
 export async function startBackground(l: BackgroundLaunch): Promise<LaunchedSession> {
-  const res: RunResult = await run(claudeBin(), backgroundArgs(l), { cwd: l.cwd, timeoutMs: 120_000 });
+  const res: RunResult = await run(claudeBin(), backgroundArgs(l), {
+    cwd: l.cwd,
+    timeoutMs: 120_000,
+  });
   const output = `${res.stdout}\n${res.stderr}`;
   if (/workspace not trusted/i.test(output)) throw new WorkspaceTrustError(l.cwd);
   const parsed = parseBackgrounded(output);
   if (!parsed) throw new ClaudeError(`claude --bg did not start a session:\n${output.trim()}`);
   for (let attempt = 0; attempt < 20; attempt++) {
-    const agent = (await listAgentsAsync(true)).find((a) => a.id === parsed.shortId || a.sessionId.startsWith(parsed.shortId));
-    if (agent) return { shortId: parsed.shortId, sessionId: agent.sessionId, name: parsed.name, output };
+    const agent = (await listAgentsAsync(true)).find(
+      (a) => a.id === parsed.shortId || a.sessionId.startsWith(parsed.shortId),
+    );
+    if (agent)
+      return { shortId: parsed.shortId, sessionId: agent.sessionId, name: parsed.name, output };
     await new Promise((r) => setTimeout(r, 250));
   }
-  throw new ClaudeError(`Started ${parsed.shortId} but it never appeared in \`claude agents --json\``);
+  throw new ClaudeError(
+    `Started ${parsed.shortId} but it never appeared in \`claude agents --json\``,
+  );
 }
 
 export function stopSession(id: string): RunResult {

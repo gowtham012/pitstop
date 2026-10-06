@@ -17,7 +17,12 @@ import {
 import { tmpDir } from '../helpers.js';
 
 let n = 0;
-function rec(type: string, parent: string | null, content: unknown, extra: Partial<TranscriptRecord> = {}): TranscriptRecord {
+function rec(
+  type: string,
+  parent: string | null,
+  content: unknown,
+  extra: Partial<TranscriptRecord> = {},
+): TranscriptRecord {
   return {
     type,
     uuid: `u${++n}`,
@@ -30,9 +35,15 @@ function rec(type: string, parent: string | null, content: unknown, extra: Parti
   };
 }
 const text = (t: string) => [{ type: 'text', text: t }];
-const toolUse = (id: string, command = 'pytest') => ({ type: 'tool_use', id, name: 'Bash', input: { command } });
+const toolUse = (id: string, command = 'pytest') => ({
+  type: 'tool_use',
+  id,
+  name: 'Bash',
+  input: { command },
+});
 const toolResult = (id: string) => ({ type: 'tool_result', tool_use_id: id, content: 'ok' });
-const jsonl = (records: TranscriptRecord[]) => records.map((r) => JSON.stringify(r)).join('\n') + '\n';
+const jsonl = (records: TranscriptRecord[]) =>
+  records.map((r) => JSON.stringify(r)).join('\n') + '\n';
 
 describe('parseTranscript', () => {
   it('drops a torn last line and unparseable lines', () => {
@@ -75,10 +86,14 @@ describe('sealTranscript', () => {
     expect(out.records.every((r) => r.sessionId === 'fork')).toBe(true);
   });
 
-  it('answers a still-running tool call as the parent\'s job and ends on an assistant turn', () => {
+  it("answers a still-running tool call as the parent's job and ends on an assistant turn", () => {
     const u1 = rec('user', null, 'run the tests');
     const a1 = rec('assistant', u1.uuid!, [toolUse('t1', 'pytest -q')]);
-    const out = sealTranscript(parseTranscript(jsonl([u1, a1])), 'fork', new Date('2026-01-01T00:00:00Z'));
+    const out = sealTranscript(
+      parseTranscript(jsonl([u1, a1])),
+      'fork',
+      new Date('2026-01-01T00:00:00Z'),
+    );
     expect(out.parentWasMidTurn).toBe(true);
     expect(out.pending).toEqual([{ id: 't1', name: 'Bash', summary: 'Bash pytest -q' }]);
     const [, , result, closing] = out.records;
@@ -101,7 +116,9 @@ describe('sealTranscript', () => {
     const out = sealTranscript([u1, a1, r1], 'fork');
     expect(out.pending.map((p) => p.id)).toEqual(['t2']);
     const added = out.records[3]!;
-    expect((added.message!.content as { tool_use_id: string }[]).map((b) => b.tool_use_id)).toEqual(['t2']);
+    expect((added.message!.content as { tool_use_id: string }[]).map((b) => b.tool_use_id)).toEqual(
+      ['t2'],
+    );
   });
 
   it('closes a prompt the parent had not answered yet', () => {
@@ -128,7 +145,13 @@ describe('usage', () => {
   it('counts each assistant message once and estimates cost', () => {
     const usage = { input_tokens: 1000, output_tokens: 500, cache_read_input_tokens: 0 };
     const a = rec('assistant', null, text('x'), {});
-    a.message = { role: 'assistant', id: 'm1', model: 'claude-sonnet-5-5', usage, content: text('x') };
+    a.message = {
+      role: 'assistant',
+      id: 'm1',
+      model: 'claude-sonnet-5-5',
+      usage,
+      content: text('x'),
+    };
     const b = { ...a, uuid: 'other' }; // same message id split across records
     const u = sumUsage([a, b]);
     expect(u.inputTokens).toBe(1000);
