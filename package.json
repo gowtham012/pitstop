@@ -54,7 +54,7 @@
   },
   "dependencies": {
     "@xterm/headless": "^6.0.0",
-    "commander": "^15.0.0",
+    "commander": "^15.1.0",
     "node-pty": "^1.1.0"
   },
   "devDependencies": {
